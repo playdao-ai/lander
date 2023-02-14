@@ -10,7 +10,7 @@ export default function Home() {
       </Head>
 
       <main>
-        <div></div>
+        <img style={{ width: 200, height: 'auto' }} src='/lander-placeholder.svg' />
       </main>
 
 
@@ -53,8 +53,18 @@ export default function Home() {
       `}</style>
 
       <style jsx global>{`
+        .logo {
+          background: white;
+        }
+
         html,
         body {
+          background: black;
+          overflow: hidden;
+          display: flex;
+          flex-direction: center;
+          justify-content: center;
+          align-items: center;
           padding: 0;
           margin: 0;
           font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto,
