@@ -10,7 +10,7 @@ export default function Home() {
       </Head>
 
       <main>
-        <img style={{ width: 200, height: 'auto' }} src='/lander-placeholder.svg' />
+        <img style={{ width: 400, height: 'auto' }} src='/lander-placeholder.svg' />
       </main>
 
 
