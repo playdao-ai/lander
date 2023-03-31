@@ -14,6 +14,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js';
 
+import { SampleLipidScene } from './Fingers'
 
 // console.log(EffectComposer)
 //lerp between two values
@@ -171,12 +172,12 @@ let t2 = undefined
 function useScene(ref) {
 	useEffect(() => {
 		if (ref.current) {
-			let [stop] = createScene(ref.current);
+			var debug_scene = new SampleLipidScene(ref.current);
 
 		}
 		return () => {
 			console.log('unmount')
-			stop()
+			debug_scene.destroy()
 		}
 
 	}, [ref]);
@@ -186,6 +187,7 @@ function useScene(ref) {
 export default function Main() {
 	const ref = useRef(null);
 	const scene = useScene(ref);
+
 
 	return <div className='w-full h-[100vh]'>
 		<canvas className='w-full h-full' ref={ref} />
