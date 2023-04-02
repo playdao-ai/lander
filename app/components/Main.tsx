@@ -1,3 +1,4 @@
+'use client';
 //import threejs
 import { useEffect } from 'react';
 import * as THREE from 'three';

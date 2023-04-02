@@ -2,6 +2,7 @@
 const nextConfig = {
 	reactStrictMode: true,
 	swcMinify: true,
+
 	webpack: (config) => {
 		config.module.rules.push({
 			test: /\.(frag|vert)$/,
@@ -9,10 +10,13 @@ const nextConfig = {
 		})
 		return config
 	},
-	plugins: [
-		require('tailwindcss'),
-		require('autoprefixer'),
-	],
+	// plugins: [
+	// 	require('tailwindcss'),
+	// 	require('autoprefixer'),
+	// ],
+	experimental: {
+		appDir: true,
+	}
 }
 
 module.exports = nextConfig
