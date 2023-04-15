@@ -40,10 +40,12 @@ Math.step = function (x, y) {
 
 let i_ray = new THREE.Ray()
 let i_plane = new THREE.Plane()
+let plane_rot = new THREE.Euler(0, 0, Math.PI / 2, 'XYZ');
 function findIntersection(v1, n_1, v2, n_2) {
 	i_ray.origin.copy(v2)
 	i_ray.direction.copy(n_2);
-	i_plane.setFromCoplanarPoints(v1, v1.clone().add(n_1), v1.clone().set(v1.x, v2.y, 2.0))
+	// i_plane.setFromCoplanarPoints(v1, v1.clone().add(n_1), v1.clone().set(v1.x, v2.y, 2.0))
+	i_plane.setFromNormalAndCoplanarPoint(n_1.clone().applyEuler(plane_rot), v1)
 	// console.log(v2_ray.intersectPlane(v1_plane, new THREE.Vector3()))
 	return i_ray.intersectPlane(i_plane, new THREE.Vector3());
 }
@@ -199,6 +201,7 @@ export class Cell {
 
 	createJointHelperHandle(joint_index) {
 		let handle = new THREE.Mesh(new THREE.SphereGeometry(0.15, 4, 4), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+
 		handle._index = joint_index
 		this.joint_handles.push(handle)
 		this.root.add(handle)
@@ -254,7 +257,7 @@ export class Cell {
 	}
 
 	updatePillConstraints(pill) {
-		let { v0, v1, v2, v3, midpoint, base_radius, normal, tip_position, max_height_point } = this.getPillVertices(pill)
+		let { v0, v1, v2, v3, midpoint, base_radius, tip_radius, normal, tip_position, max_height_point } = this.getPillVertices(pill)
 
 
 		pill.base_target_point.copy(midpoint)
@@ -262,8 +265,11 @@ export class Cell {
 		let basepoint = new THREE.Vector3(pill.matter_base.position.x, pill.matter_base.position.y, 0)
 		let tippoint = new THREE.Vector3(pill.matter_tip.position.x, pill.matter_tip.position.y, 0)
 
+
+
+
 		pill.base_radius = Math.lerp(pill.base_radius, base_radius, 0.1)
-		pill.tip_radius = Math.lerp(pill.tip_radius, base_radius / 2, 0.1)
+		pill.tip_radius = Math.lerp(pill.tip_radius, tip_radius, 0.1)
 
 		pill.matter_base.circleRadius = pill.base_radius
 		pill.matter_tip.circleRadius = 0.00
@@ -278,32 +284,28 @@ export class Cell {
 
 		let [p1, p2] = findExternalTangents(tippoint, pill.tip_radius, basepoint, pill.base_radius)
 
-
 		let basepoint_normal = new THREE.Vector3().subVectors(tippoint, basepoint).normalize()
 
 		const plane2 = new THREE.Plane().setFromNormalAndCoplanarPoint(basepoint_normal, basepoint);
-
 		const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(findScaledNormal(basepoint, basepoint.clone().add(basepoint_normal)), basepoint);
+
 		// Calculate the distance from the plane to point B
 		const r = plane.distanceToPoint(p1);
 		let r2 = plane2.distanceToPoint(p1);
-
-
 		const r3 = plane.distanceToPoint(p2);
 		let r4 = plane2.distanceToPoint(p2);
 
 
 		for (let i = 0; i < vc / 2; i++) {
-			pill.cylinder.geometry.attributes.position.array[i * 3 + 0] = Math.cos((Math.PI * 2 / sides) * i) * r
-			pill.cylinder.geometry.attributes.position.array[i * 3 + 2] = Math.sin((Math.PI * 2 / sides) * i) * r
-			pill.cylinder.geometry.attributes.position.array[i * 3 + 1] = r2
-		}
-
-
-		for (let i = vc / 2; i < vc; i++) {
 			pill.cylinder.geometry.attributes.position.array[i * 3 + 0] = Math.cos((Math.PI * 2 / sides) * i) * r3
 			pill.cylinder.geometry.attributes.position.array[i * 3 + 2] = Math.sin((Math.PI * 2 / sides) * i) * r3
 			pill.cylinder.geometry.attributes.position.array[i * 3 + 1] = r4
+		}
+
+		for (let i = vc / 2; i < vc; i++) {
+			pill.cylinder.geometry.attributes.position.array[i * 3 + 0] = Math.cos((Math.PI * 2 / sides) * i) * r
+			pill.cylinder.geometry.attributes.position.array[i * 3 + 2] = Math.sin((Math.PI * 2 / sides) * i) * r
+			pill.cylinder.geometry.attributes.position.array[i * 3 + 1] = r2
 		}
 
 		let rot_y = Math.atan2(basepoint_normal.x, basepoint_normal.y)
@@ -315,11 +317,7 @@ export class Cell {
 		pill.cylinder.rotation.z = -rot_y
 		pill.cylinder.position.copy(basepoint)
 
-
 		//tip_tangent_offset
-
-
-		// pill.tip.position.copy(pill.matter_base.position).add(normal.multiplyScalar(tip_tangent_offset))
 		pill.tip.position.z = 0
 		pill.tip.rotation.y = rot_y
 		pill.tip.position.set(tippoint.x, tippoint.y, 0)
@@ -499,6 +497,11 @@ export class Cell {
 
 		// build height handle
 		let height_handle = new THREE.Mesh(new THREE.CircleGeometry(0.15, 5), new THREE.MeshBasicMaterial({ color: 0xff5e00 }));
+		height_handle.material.depthTest = false;
+		height_handle.material.depthWrite = false;
+		height_handle.renderOrder = 999
+		// height_handle.onBeforeRender = function (renderer) { renderer.clearDepth(); };
+
 		height_handle.pill = pill
 		helper.add(height_handle)
 		helper.height_handle = height_handle
@@ -577,33 +580,24 @@ export class Cell {
 		pill.matter_base.collisionFilter.category = 0x0001;
 		pill.matter_tip.collisionFilter.category = 0x0002;
 
-		// const material = new THREE.ShaderMaterial({
 
-		// 	uniforms: {
 
-		// 		time: { value: 1.0 },
-		// 		resolution: { value: new THREE.Vector2() }
-
-		// 	},
-
-		// 	vertexShader: document.getElementById('vertexShader').textContent,
-
-		// 	fragmentShader: document.getElementById('fragmentShader').textContent
-
-		// });
-
-		let sides = 16
+		let sides = 24
 		pill.sides = sides
 
 
 		// const finger_material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
 		const finger_material = new THREE.MeshStandardMaterial({ color: 0xffff00 });
-		finger_material.wireframe = true;
-		finger_material.transparency = true;
-		finger_material.opacity = 0.5;
+		finger_material.wireframe = false;
+		finger_material.transparent = true;
+		finger_material.opacity = 0.2;
 		finger_material.isVisible = false
 
-		const tip_geometry = new THREE.SphereGeometry(1, 12, 12, 0, Math.PI, 0, Math.PI);
+		finger_material.depthWrite = false
+		finger_material.depthTest = false
+
+
+		const tip_geometry = new THREE.SphereGeometry(1, 24, 24, 0, Math.PI * 2, 0, Math.PI * 2);
 		const finger_geometry = new THREE.CylinderGeometry(1, 1, 1, sides, 1, true, 0, Math.PI * 2);
 		const base_geometry = new THREE.SphereGeometry(1, 24, 24, 0, Math.PI * 2, 0, Math.PI * 2);
 
@@ -693,22 +687,47 @@ export class Cell {
 		let left_intersection_point = findIntersection(v1, left_normal, midpoint, normal);
 		let right_intersection_point = findIntersection(v2, right_normal, midpoint, normal);
 
+
+
+
 		if (left_intersection_point) {
-			max_height = Math.min(max_height, midpoint.distanceTo(left_intersection_point))
+			max_height = Math.min(max_height, midpoint.distanceTo(left_intersection_point) - base_radius / 2)
 		}
 
 		if (right_intersection_point) {
-			max_height = Math.min(max_height, midpoint.distanceTo(right_intersection_point))
+			max_height = Math.min(max_height, midpoint.distanceTo(right_intersection_point) - base_radius / 2)
 		}
 
+
+
+
+		let target_height = this.pill_height_buffer[pill._index]
+		let target_tip_radius = base_radius
+
+
+
+		// max_height -= base_radius
+
+		// let left_plane = new THREE.Plane().setFromNormalAndCoplanarPoint(left_normal, v1)
+		let min_tip_radius = base_radius / 2
+		let max_tip_radius = base_radius * 2
 
 
 		max_height_point.copy(midpoint).addScaledVector(normal, max_height)
 
-		let height = Math.min(max_height, this.pill_height_buffer[pill._index])
+		let height = Math.min(max_height, target_height)
 		let tip_position = midpoint.clone().addScaledVector(normal, height)
 
-		return { v0, v1, v2, v3, normal, base_radius, prev_normal, next_normal, left_normal, right_normal, midpoint, max_height_point, max_height, height, tip_position, left_intersection_point, right_intersection_point }
+		let tip_radius = Math.max(min_tip_radius, base_radius * (1 - (height / max_height)))
+
+
+
+
+
+
+
+
+		return { v0, v1, v2, v3, normal, base_radius, tip_radius, prev_normal, next_normal, left_normal, right_normal, midpoint, max_height_point, max_height, height, tip_position, left_intersection_point, right_intersection_point }
 	}
 
 }
