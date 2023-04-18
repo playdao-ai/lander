@@ -68,7 +68,7 @@ function findExternalTangents(cv_1, cr_1, cv_2, cr_2) {
 	let t1_b = new THREE.Vector3(cv_2.x + r2 * Math.cos(a + angle1), cv_2.y + r2 * Math.sin(a + angle1), 0)
 
 
-	return [t1_a, t1_b]
+	return [t1_a, t1_b, angle1]
 
 }
 
@@ -254,6 +254,7 @@ export class Cell {
 	updatePill(pill) {
 		this.updatePillConstraints(pill)
 		this.updatePillHelper(pill)
+		this.updatePillFace(pill)
 
 	}
 
@@ -283,7 +284,7 @@ export class Cell {
 		let vc = pill.cylinder.geometry.attributes.position.array.length / 3
 		let sides = pill.sides
 
-		let [p1, p2] = findExternalTangents(tippoint, pill.tip_radius, basepoint, pill.base_radius)
+		let [p1, p2, angle] = findExternalTangents(tippoint, pill.tip_radius, basepoint, pill.base_radius)
 
 		let basepoint_normal = new THREE.Vector3().subVectors(tippoint, basepoint).normalize()
 
@@ -389,9 +390,11 @@ export class Cell {
 
 		pill.top_position = pill.helper.height_handle.position
 
-		let [p1, p2] = findExternalTangents(midpoint, base_radius, tip_position, pill.tip_radius)
+		let [p1, p2, tan_angle] = findExternalTangents(midpoint, base_radius, tip_position, pill.tip_radius)
 
-
+		// let tangent_angle = p2.angleTo(p1)
+		pill.tangent_angle = tan_angle
+		// console.log(tanget_angle)
 
 		pill.helper.tangent_buffer.set([p1.x, p1.y, 0, p2.x, p2.y, 0])
 		pill.helper.tangent_line.geometry.attributes.position.needsUpdate = true
@@ -492,7 +495,7 @@ export class Cell {
 		let height_handle = new THREE.Mesh(new THREE.CircleGeometry(0.15, 5), new THREE.MeshBasicMaterial({ color: 0xff5e00 }));
 		height_handle.material.depthTest = false;
 		height_handle.material.depthWrite = false;
-		height_handle.renderOrder = 999
+		// height_handle.renderOrder = 999
 		// height_handle.onBeforeRender = function (renderer) { renderer.clearDepth(); };
 
 		height_handle.pill = pill
@@ -575,24 +578,25 @@ export class Cell {
 
 
 
-		let sides = 24
+		let sides = 48
 		pill.sides = sides
 
 
 		// const finger_material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-		const finger_material = new THREE.MeshStandardMaterial({ color: 0xffff00 });
-		finger_material.wireframe = false;
-		finger_material.transparent = true;
-		finger_material.opacity = 1;
-		finger_material.isVisible = false
+		// const finger_material = new THREE.MeshStandardMaterial({ color: 0xffff00 });
 
-		finger_material.depthWrite = false
-		finger_material.depthTest = false
+		const finger_material = this.buildFingerMaterial()
+		// finger_material.transparent = true;
+		// finger_material.opacity = 1;
+		// finger_material.isVisible = false
+
+		// finger_material.depthWrite = false
+		// finger_material.depthTest = false
 
 
-		const tip_geometry = new THREE.SphereGeometry(1, 24, 24, 0, Math.PI * 2, 0, Math.PI * 2);
+		const tip_geometry = new THREE.SphereGeometry(1, pill.sides, pill.sides, 0, Math.PI * 2, 0, Math.PI * 2);
 		const finger_geometry = new THREE.CylinderGeometry(1, 1, 1, sides, 1, true, 0, Math.PI * 2);
-		const base_geometry = new THREE.SphereGeometry(1, 24, 24, 0, Math.PI * 2, 0, Math.PI * 2);
+		const base_geometry = new THREE.SphereGeometry(1, pill.sides, pill.sides, 0, Math.PI * 2, 0, Math.PI * 2);
 
 		pill.cylinder = new THREE.Mesh(finger_geometry, finger_material);
 		pill.tip = new THREE.Mesh(tip_geometry, finger_material);
@@ -608,6 +612,10 @@ export class Cell {
 		pill.base_radius = 0
 		pill.tip_radius = 0
 
+		pill.cylinder.renderOrder = 10
+		pill.tip.renderOrder = 10
+		pill.base.renderOrder = 10
+
 
 
 		Matter.Composite.add(this.world, [pill.matter_base, pill.matter_tip, pill.matter_constraint, pill.matter_constraint_tip, pill.matter_constraint_2]);
@@ -615,10 +623,118 @@ export class Cell {
 		return pill
 	}
 
+	buildFingerMaterial() {
+
+		const loader = new THREE.TextureLoader();
+		const imgTexture = loader.load('moss.png');
+		const thicknessTexture = loader.load('test2.png');
+		imgTexture.wrapS = imgTexture.wrapT = THREE.RepeatWrapping;
+
+		const shader = SubsurfaceScatteringShader;
+		const uniforms = THREE.UniformsUtils.clone(shader.uniforms);
+
+
+		uniforms['map'].value = imgTexture;
+
+		uniforms['diffuse'].value = new THREE.Vector3(1.0, 1.0, 1.0);
+		uniforms['shininess'].value = 10;
+
+		uniforms['thicknessMap'].value = thicknessTexture;
+		uniforms['thicknessColor'].value = new THREE.Vector3(1.0, 0.3, 0.0);
+		uniforms['thicknessDistortion'].value = 1.;
+		uniforms['thicknessAmbient'].value = 0.2;
+		uniforms['thicknessAttenuation'].value = 3.0;
+		uniforms['thicknessPower'].value = 2.0;
+		uniforms['thicknessScale'].value = 1.2;
+
+		const material = new THREE.ShaderMaterial({
+			uniforms: uniforms,
+			vertexShader: shader.vertexShader,
+			fragmentShader: shader.fragmentShader,
+			lights: true
+		});
+		material.extensions.derivatives = true;
+
+		return material
+	}
+
+
+	buildPillFace(pill) {
+		let { midpoint, max_height_point } = this.getPillVertices(pill)
+
+		let eye_material = new THREE.MeshBasicMaterial({ color: 0xffffff })
+		let mouth_material = new THREE.MeshBasicMaterial({ color: 0x00FFD8 })
+
+		// eye_material.depthWrite = false
+		// eye_material.depthTest = false
+
+		// mouth_material.depthWrite = false
+		// mouth_material.depthTest = false
+
+		let left_eye_geom = new THREE.PlaneGeometry(1, 1, 4, 4)
+		let right_eye_geom = new THREE.PlaneGeometry(1, 1, 4, 4)
+		let mouth_geom = new THREE.PlaneGeometry(1, 1, 4, 4)
+
+		let left_eye = new THREE.Mesh(left_eye_geom, eye_material)
+		let right_eye = new THREE.Mesh(right_eye_geom, eye_material)
+		let mouth = new THREE.Mesh(mouth_geom, mouth_material)
+
+		left_eye.position.x = -0.75
+		right_eye.position.x = 0.75
+		mouth.position.y = -1
+
+
+		let face = new THREE.Group()
+		let face_inner = new THREE.Group()
+		face_inner.add(left_eye)
+		face_inner.add(right_eye)
+		face_inner.add(mouth)
+
+		face.add(face_inner)
+
+		face.renderOrder = 99
+
+		this.root.add(face)
+
+		pill.face = face
+		pill.face_inner = face_inner
+		pill.left_eye = left_eye
+		pill.right_eye = right_eye
+
+	}
+
+	updatePillFace(pill) {
+		// let { midpoint, tip_position, tip_radius, base_radius } = this.getPillVertices(pill)
+
+
+
+		pill.face.position.copy(pill.matter_tip.position)
+		pill.face.position.z = pill.tip_radius + 0.25
+		pill.face.scale.set(pill.tip_radius, pill.tip_radius, pill.tip_radius).multiplyScalar(0.5)
+
+
+		// console.log
+		pill.face.rotation.copy(pill.cylinder.rotation)
+		// console.log(pill.tanget_angle)
+		pill.face_inner.rotation.x = -Math.pow(Math.abs((pill.tip_radius - pill.base_radius)) * .5, 0.8) //pill.tanget_angle
+		pill.face_inner.rotation.x = (pill.tangent_angle - Math.PI / 2)
+
+		// pill.left_eye.lookAt(new THREE.Vector3(pill.matter_tip.position.x, pill.matter_tip.position.y, 0))
+		pill.left_eye.rotation.y = -0.2
+		pill.right_eye.rotation.y = 0.2
+		// pill.face.rotation.z = 0
+
+		// pill.tip_position.copy(tip_position).(camera.position,tip_radius)
+
+
+	}
+
+
 	buildPills() {
 		let pill = undefined
 		for (let i = 1; i < this.settings.joint_count; i++) {
 			pill = this.buildPill(i - 1, i, pill)
+			this.buildPillFace(pill)
 		}
 	}
 
@@ -739,7 +855,7 @@ export class SampleLipidScene {
 		this.height = canvas_el.clientHeight;
 		let settings = {
 			camera_rotation: false,
-			joint_count: 11,
+			joint_count: 10,
 		}
 		this.settings = settings
 		let gui = new GUI();
@@ -792,12 +908,15 @@ export class SampleLipidScene {
 		grid.material.color = new THREE.Color(0x404040)
 		this.scene.add(grid);
 
+
+		this.buildLights()
+
 		const axesHelper = new THREE.AxesHelper(5);
 		axesHelper.position.y = 0
 		this.scene.add(axesHelper);
 
-		const light = new THREE.AmbientLight(0x404040); // soft white light
-		this.scene.add(light);
+		// const light = new THREE.AmbientLight(0x404040); // soft white light
+		// this.scene.add(light);
 		this.controls.enableRotate = settings.camera_rotation
 
 		let engine = Matter.Engine.create()
@@ -815,6 +934,25 @@ export class SampleLipidScene {
 
 		this.animate(0)
 		this.resize()
+	}
+
+	buildLights() {
+		const pointLight1 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0x888888 }));
+
+		pointLight1.add(new THREE.PointLight(new THREE.Color(0.0, 0.3, 0.5), .6, 100));
+		this.scene.add(pointLight1);
+		pointLight1.position.x = 0;
+		pointLight1.position.y = 0;
+		pointLight1.position.z = 10;
+
+		const pointLight2 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0x888888 }));
+		pointLight2.add(new THREE.PointLight(new THREE.Color(0.5, 0.3, 0.0), .6, 100));
+		this.scene.add(pointLight2);
+		pointLight2.position.x = 0;
+		pointLight2.position.y = 0;
+		pointLight2.position.z = -10;
+
+
 	}
 
 
