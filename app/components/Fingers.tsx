@@ -365,7 +365,7 @@ export class Cell {
 		pill.helper.v2_mixed_normal_line.geometry.attributes.position.needsUpdate = true
 		pill.helper.mid_normal_line.geometry.attributes.position.needsUpdate = true
 
-		let max_point = midpoint.clone().add(normal)
+		// let max_point = midpoint.clone().add(normal)
 		let diameter = v1.distanceTo(v2)
 		let r = diameter
 
@@ -583,7 +583,7 @@ export class Cell {
 		const finger_material = new THREE.MeshStandardMaterial({ color: 0xffff00 });
 		finger_material.wireframe = false;
 		finger_material.transparent = true;
-		finger_material.opacity = 0.2;
+		finger_material.opacity = 1;
 		finger_material.isVisible = false
 
 		finger_material.depthWrite = false
@@ -623,22 +623,13 @@ export class Cell {
 	}
 
 
-	//create line extending out into the shared normal
-	//shared normal line is 1 unit long
-	//find midpoint of line
-	//find point on normal line that intersects with midpoint normal line
-	//calculate position and radius of pill tip
-	//pill tip is a circle, circle max radius is same as base radius
-	//pill tip circle radius is 1 - distance from midpoint base circle tip to intersection point
-	//pill top position is max
-
 
 	getPillVertices(pill) {
 
 		let joint_index_a = pill.v1_index
 		let joint_index_b = pill.v2_index
 
-		let padding = 0.05
+		let padding = 0.1
 
 		let v1 = new THREE.Vector3(this.joints_buffer[joint_index_a * 3 + 0], this.joints_buffer[joint_index_a * 3 + 1], this.joints_buffer[joint_index_a * 3 + 2])
 		let v0 = joint_index_a > 0 ? new THREE.Vector3(this.joints_buffer[(joint_index_a - 1) * 3 + 0], this.joints_buffer[(joint_index_a - 1) * 3 + 1], this.joints_buffer[(joint_index_a - 1) * 3 + 2]) : v1
@@ -695,37 +686,25 @@ export class Cell {
 		base_radius = Math.min(base_radius, Math.abs(right_plane.distanceToPoint(midpoint)) - padding)
 		base_radius = Math.min(base_radius, Math.abs(left_plane.distanceToPoint(midpoint)) - padding)
 
+		let mid_line = new THREE.Line3(midpoint.clone().addScaledVector(normal, -999), midpoint.clone().addScaledVector(normal, 999))
+
 
 		if (left_intersection_point) {
-			max_height = Math.min(max_height, midpoint.distanceTo(left_intersection_point) - tip_radius - padding)
+			left_plane.translate(left_normal.clone().applyEuler(plane_rot).multiplyScalar(tip_radius).negate())
+			left_plane.intersectLine(mid_line, max_height_point)
+			max_height = Math.min(max_height, max_height_point.distanceTo(midpoint))
 		}
 
 		if (right_intersection_point) {
-			max_height = Math.min(max_height, midpoint.distanceTo(right_intersection_point) - tip_radius - padding)
+			right_plane.translate(right_normal.clone().applyEuler(plane_rot).multiplyScalar(tip_radius))
+			right_plane.intersectLine(mid_line, max_height_point)
+			max_height = Math.min(max_height, max_height_point.distanceTo(midpoint))
 		}
 
 		max_height_point.copy(midpoint).addScaledVector(normal, max_height)
 
 		let height = Math.min(max_height, target_height)
 		let tip_position = midpoint.clone().addScaledVector(normal, height)
-
-
-
-
-		// max_height -= base_radius
-
-		// let left_plane = new THREE.Plane().setFromNormalAndCoplanarPoint(left_normal, v1)
-		let min_tip_radius = base_radius / 2
-		let max_tip_radius = base_radius * 2
-
-
-
-		// let tip_radius = Math.max(min_tip_radius, base_radius * (1 - (height / max_height)))
-
-
-
-
-
 
 
 
