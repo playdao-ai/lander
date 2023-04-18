@@ -217,13 +217,13 @@ export class Cell {
 		this.pill_height_buffer = new Float32Array(this.settings.joint_count - 1); // 3 vertices per point
 
 		for (let i = 0; i < this.settings.joint_count; i++) {
-			this.joints_buffer[i * 3 + 0] = -this.settings.joint_count + i * 2
-			this.joints_buffer[i * 3 + 1] = Math.sin(i * 2) * 2
+			this.joints_buffer[i * 3 + 0] = -this.settings.joint_count + i * 4
+			this.joints_buffer[i * 3 + 1] = Math.sin(i * 2) * 1
 			this.createJointHelperHandle(i)
 		}
 
 		for (let i = 0; i < this.settings.joint_count - 1; i++) {
-			this.pill_height_buffer[i] = 0.5 + Math.sin(i * 2) * .5
+			this.pill_height_buffer[i] = 2 + Math.sin(i * 2) * .5
 		}
 
 		this.buildJointHelpers()
@@ -252,8 +252,9 @@ export class Cell {
 
 
 	updatePill(pill) {
-		this.updatePillHelper(pill)
 		this.updatePillConstraints(pill)
+		this.updatePillHelper(pill)
+
 	}
 
 	updatePillConstraints(pill) {
@@ -264,7 +265,7 @@ export class Cell {
 
 		let basepoint = new THREE.Vector3(pill.matter_base.position.x, pill.matter_base.position.y, 0)
 		let tippoint = new THREE.Vector3(pill.matter_tip.position.x, pill.matter_tip.position.y, 0)
-
+		// tippoint = tip_position
 
 
 
@@ -276,7 +277,7 @@ export class Cell {
 
 		pill.cylinder.position.copy(basepoint).add(normal.clone().multiplyScalar(pill.base_radius))
 
-		pill.tip_target_point.copy(midpoint).add(normal.clone().multiplyScalar(this.pill_height_buffer[pill._index]))
+		pill.tip_target_point.copy(tip_position)//.add(normal.clone().multiplyScalar(this.pill_height_buffer[pill._index]))
 
 
 		let vc = pill.cylinder.geometry.attributes.position.array.length / 3
@@ -333,9 +334,9 @@ export class Cell {
 		pill.base.scale.z = pill.base_radius
 
 
-		pill.cylinder.scale.x = 1
-		pill.cylinder.scale.y = 1
-		pill.cylinder.scale.z = 1
+		// pill.cylinder.scale.x = 1
+		// pill.cylinder.scale.y = 1
+		// pill.cylinder.scale.z = 1
 
 
 
@@ -446,8 +447,6 @@ export class Cell {
 		mid_normal_line.material.color = new THREE.Color(0xffa200);
 
 
-		// console.log(v1_mixed_normal_line.geometry.attributes)
-
 		let top_circle_geom = new THREE.CircleGeometry(0.5, 32)
 		let bottom_circle_geom = new THREE.CircleGeometry(0.5, 32)
 		let top_circle_wire = new THREE.WireframeGeometry(top_circle_geom)
@@ -464,7 +463,6 @@ export class Cell {
 		bottom_circle.material.opacity = 0.1;
 		bottom_circle.material.transparent = true;
 		bottom_circle.material.color = new THREE.Color(0xffffff)
-
 
 
 		let helper = new THREE.Group()
@@ -488,11 +486,6 @@ export class Cell {
 		helper.top_circle = top_circle
 
 		helper.tangent_buffer = tangent_buffer
-
-		// helper.left_intersection = left_intersection
-		// helper.right_intersection = right_intersection
-		// helper.add(left_intersection).add(right_intersection)
-
 
 
 		// build height handle
@@ -645,7 +638,7 @@ export class Cell {
 		let joint_index_a = pill.v1_index
 		let joint_index_b = pill.v2_index
 
-
+		let padding = 0.05
 
 		let v1 = new THREE.Vector3(this.joints_buffer[joint_index_a * 3 + 0], this.joints_buffer[joint_index_a * 3 + 1], this.joints_buffer[joint_index_a * 3 + 2])
 		let v0 = joint_index_a > 0 ? new THREE.Vector3(this.joints_buffer[(joint_index_a - 1) * 3 + 0], this.joints_buffer[(joint_index_a - 1) * 3 + 1], this.joints_buffer[(joint_index_a - 1) * 3 + 2]) : v1
@@ -657,7 +650,7 @@ export class Cell {
 		let left_normal = new THREE.Vector3().lerpVectors(prev_normal, normal, 0.5).normalize()
 		let right_normal = new THREE.Vector3().lerpVectors(normal, next_normal, 0.5).normalize()
 		let midpoint = new THREE.Vector3().addVectors(v1, v2).divideScalar(2)
-		let base_radius = v1.distanceTo(v2) / 2
+		let base_radius = v1.distanceTo(v2) / 2 - padding
 
 
 		let max_height = 10 //this.pill_height_buffer[pill._index]
@@ -687,22 +680,35 @@ export class Cell {
 		let left_intersection_point = findIntersection(v1, left_normal, midpoint, normal);
 		let right_intersection_point = findIntersection(v2, right_normal, midpoint, normal);
 
+		let left_plane = (new THREE.Plane()).setFromNormalAndCoplanarPoint(left_normal.clone().applyEuler(plane_rot), v1)
+		let right_plane = (new THREE.Plane()).setFromNormalAndCoplanarPoint(right_normal.clone().applyEuler(plane_rot), v2)
 
+
+		let target_tip_radius = base_radius
+		let target_height = this.pill_height_buffer[pill._index]
+		let target_tip_point = midpoint.clone().addScaledVector(normal, target_height)
+
+		let tip_radius = Math.min(target_tip_radius, Math.abs(left_plane.distanceToPoint(target_tip_point)) - padding)
+		tip_radius = Math.min(tip_radius, Math.abs(right_plane.distanceToPoint(target_tip_point)) - padding)
+		tip_radius = Math.max(tip_radius, base_radius / 4)
+
+		base_radius = Math.min(base_radius, Math.abs(right_plane.distanceToPoint(midpoint)) - padding)
+		base_radius = Math.min(base_radius, Math.abs(left_plane.distanceToPoint(midpoint)) - padding)
 
 
 		if (left_intersection_point) {
-			max_height = Math.min(max_height, midpoint.distanceTo(left_intersection_point) - base_radius / 2)
+			max_height = Math.min(max_height, midpoint.distanceTo(left_intersection_point) - tip_radius - padding)
 		}
 
 		if (right_intersection_point) {
-			max_height = Math.min(max_height, midpoint.distanceTo(right_intersection_point) - base_radius / 2)
+			max_height = Math.min(max_height, midpoint.distanceTo(right_intersection_point) - tip_radius - padding)
 		}
 
+		max_height_point.copy(midpoint).addScaledVector(normal, max_height)
 
+		let height = Math.min(max_height, target_height)
+		let tip_position = midpoint.clone().addScaledVector(normal, height)
 
-
-		let target_height = this.pill_height_buffer[pill._index]
-		let target_tip_radius = base_radius
 
 
 
@@ -713,12 +719,9 @@ export class Cell {
 		let max_tip_radius = base_radius * 2
 
 
-		max_height_point.copy(midpoint).addScaledVector(normal, max_height)
 
-		let height = Math.min(max_height, target_height)
-		let tip_position = midpoint.clone().addScaledVector(normal, height)
+		// let tip_radius = Math.max(min_tip_radius, base_radius * (1 - (height / max_height)))
 
-		let tip_radius = Math.max(min_tip_radius, base_radius * (1 - (height / max_height)))
 
 
 
@@ -757,7 +760,7 @@ export class SampleLipidScene {
 		this.height = canvas_el.clientHeight;
 		let settings = {
 			camera_rotation: false,
-			joint_count: 3,
+			joint_count: 11,
 		}
 		this.settings = settings
 		let gui = new GUI();
