@@ -134,6 +134,7 @@ function findScaledNormal(point_a, point_b) {
 export class Cell {
 	public root: THREE.Object3D;
 	private settings: any;
+	private gui: GUI;
 	private camera: THREE.Camera;
 	private renderer: THREE.Renderer;
 
@@ -145,12 +146,14 @@ export class Cell {
 	private world: Matter.World;
 	private engine: Matter.Engine;
 	private scene: THREE.Scene;
+	private finger_material: any;
 
 
 
-	constructor(settings, camera, renderer, world, engine, scene) {
+	constructor(settings, gui, camera, renderer, world, engine, scene) {
 		this.root = new THREE.Object3D()
 		this.scene = scene
+		this.gui = gui
 		this.settings = settings
 		this.camera = camera
 		this.renderer = renderer
@@ -281,6 +284,7 @@ export class Cell {
 		pill.tip_target_point.copy(tip_position)//.add(normal.clone().multiplyScalar(this.pill_height_buffer[pill._index]))
 
 
+
 		let vc = pill.cylinder.geometry.attributes.position.array.length / 3
 		let sides = pill.sides
 
@@ -309,6 +313,9 @@ export class Cell {
 			pill.cylinder.geometry.attributes.position.array[i * 3 + 2] = Math.sin((Math.PI * 2 / sides) * i) * r
 			pill.cylinder.geometry.attributes.position.array[i * 3 + 1] = r2
 		}
+
+
+		pill.cylinder.geometry.computeVertexNormals();
 
 		let rot_y = Math.atan2(basepoint_normal.x, basepoint_normal.y)
 
@@ -516,7 +523,7 @@ export class Cell {
 		pill._prev = prev_pill
 		if (prev_pill) prev_pill._next = pill
 		let pill_helper = this.buildPillHelper(pill)
-		this.root.add(pill_helper)
+		// this.root.add(pill_helper)
 		pill.helper = pill_helper
 		pill.height = Math.abs(Math.sin(joint_index_a * 2) * 2)
 		this.root.add(pill)
@@ -578,7 +585,7 @@ export class Cell {
 
 
 
-		let sides = 48
+		let sides = 32
 		pill.sides = sides
 
 
@@ -586,8 +593,11 @@ export class Cell {
 		// const finger_material = new THREE.MeshStandardMaterial({ color: 0xffff00 });
 
 		const finger_material = this.buildFingerMaterial()
-		// finger_material.transparent = true;
-		// finger_material.opacity = 1;
+		pill.finger_material = finger_material
+
+		finger_material.opacity = 0.3;
+
+
 		// finger_material.isVisible = false
 
 		// finger_material.depthWrite = false
@@ -624,6 +634,7 @@ export class Cell {
 	}
 
 	buildFingerMaterial() {
+		if (this.finger_material) return this.finger_material
 
 		const loader = new THREE.TextureLoader();
 		const imgTexture = loader.load('moss.png');
@@ -641,11 +652,11 @@ export class Cell {
 
 		uniforms['thicknessMap'].value = thicknessTexture;
 		uniforms['thicknessColor'].value = new THREE.Vector3(1.0, 0.3, 0.0);
-		uniforms['thicknessDistortion'].value = 1.;
-		uniforms['thicknessAmbient'].value = 0.2;
-		uniforms['thicknessAttenuation'].value = 3.0;
-		uniforms['thicknessPower'].value = 2.0;
-		uniforms['thicknessScale'].value = 1.2;
+		uniforms['thicknessDistortion'].value = 0.71;
+		uniforms['thicknessAmbient'].value = 1.75;
+		uniforms['thicknessAttenuation'].value = 0.65;
+		uniforms['thicknessPower'].value = 1.8;
+		uniforms['thicknessScale'].value = 11.3;
 
 		const material = new THREE.ShaderMaterial({
 			uniforms: uniforms,
@@ -654,6 +665,57 @@ export class Cell {
 			lights: true
 		});
 		material.extensions.derivatives = true;
+		this.finger_material = material
+
+		console.log(this.gui)
+		this.settings.thicknessAmbient = 0.1
+
+
+
+		const ThicknessControls = function () {
+
+			this.distortion = uniforms['thicknessDistortion'].value;
+			this.ambient = uniforms['thicknessAmbient'].value;
+			this.attenuation = uniforms['thicknessAttenuation'].value;
+			this.power = uniforms['thicknessPower'].value;
+			this.scale = uniforms['thicknessScale'].value;
+
+		};
+
+		const thicknessControls = new ThicknessControls();
+
+		let gui = this.gui
+
+		gui.add(thicknessControls, 'distortion').min(0.01).max(1).step(0.01).onChange(function () {
+
+			uniforms['thicknessDistortion'].value = thicknessControls.distortion;
+			console.log('distortion');
+
+		});
+
+		gui.add(thicknessControls, 'ambient').min(0.01).max(5.0).step(0.05).onChange(function () {
+
+			uniforms['thicknessAmbient'].value = thicknessControls.ambient;
+
+		});
+
+		gui.add(thicknessControls, 'attenuation').min(0.01).max(5.0).step(0.05).onChange(function () {
+
+			uniforms['thicknessAttenuation'].value = thicknessControls.attenuation;
+
+		});
+
+		gui.add(thicknessControls, 'power').min(0.01).max(16.0).step(0.1).onChange(function () {
+
+			uniforms['thicknessPower'].value = thicknessControls.power;
+
+		});
+
+		gui.add(thicknessControls, 'scale').min(0.01).max(50.0).step(0.1).onChange(function () {
+
+			uniforms['thicknessScale'].value = thicknessControls.scale;
+
+		});
 
 		return material
 	}
@@ -854,21 +916,22 @@ export class SampleLipidScene {
 		this.width = canvas_el.clientWidth;
 		this.height = canvas_el.clientHeight;
 		let settings = {
+			thicknessAmbient: 0.1,
 			camera_rotation: false,
 			joint_count: 10,
 		}
 		this.settings = settings
 		let gui = new GUI();
 		this.gui = gui
+
 		gui.add(settings, 'camera_rotation')
 			.name('camera rotation')
 			.onChange(value => {
 				this.controls.enableRotate = value;
 				if (value == false) {
-
+					console.log('test')
+					this.controls.reset();
 					this.camera.position.set(0, 0, 10)
-					// this.camera.rotation.set(0, 0, 0)
-					this.camera.lookAt(0, 0, 0);
 				}
 			});
 
@@ -892,6 +955,8 @@ export class SampleLipidScene {
 
 		this.camera = new THREE.PerspectiveCamera(75, this.width / this.height, 0.1, 1000);
 		this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+
+		window.camera = this.camera
 		// console.log(this.controls)
 
 		//move camera back
@@ -915,8 +980,8 @@ export class SampleLipidScene {
 		axesHelper.position.y = 0
 		this.scene.add(axesHelper);
 
-		// const light = new THREE.AmbientLight(0x404040); // soft white light
-		// this.scene.add(light);
+		const light = new THREE.AmbientLight(new THREE.Color(0.6, 0.45, 0.45)); // soft white light
+		this.scene.add(light);
 		this.controls.enableRotate = settings.camera_rotation
 
 		let engine = Matter.Engine.create()
@@ -929,7 +994,8 @@ export class SampleLipidScene {
 
 		window.addEventListener('resize', this.resize.bind(this));
 
-		this.cell = new Cell(this.settings, this.camera, this.renderer, this.world, this.engine, this.scene)
+
+		this.cell = new Cell(this.settings, this.gui, this.camera, this.renderer, this.world, this.engine, this.scene)
 		this.scene.add(this.cell.root)
 
 		this.animate(0)
@@ -937,20 +1003,28 @@ export class SampleLipidScene {
 	}
 
 	buildLights() {
-		const pointLight1 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0x888888 }));
+		const pointLight1 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
 
-		pointLight1.add(new THREE.PointLight(new THREE.Color(0.0, 0.3, 0.5), .6, 100));
+		pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), 1.4, 6));
 		this.scene.add(pointLight1);
 		pointLight1.position.x = 0;
-		pointLight1.position.y = 0;
-		pointLight1.position.z = 10;
+		pointLight1.position.y = 3;
+		pointLight1.position.z = 0;
 
-		const pointLight2 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0x888888 }));
-		pointLight2.add(new THREE.PointLight(new THREE.Color(0.5, 0.3, 0.0), .6, 100));
+		const pointLight2 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+
+		pointLight2.add(new THREE.PointLight(new THREE.Color(1, 1, 1), 1.4, 40));
 		this.scene.add(pointLight2);
-		pointLight2.position.x = 0;
-		pointLight2.position.y = 0;
-		pointLight2.position.z = -10;
+		pointLight2.position.x = 5;
+		pointLight2.position.y = 26;
+		pointLight2.position.z = 10;
+
+		// const pointLight2 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+		// pointLight2.add(new THREE.PointLight(new THREE.Color(1, 1, 1), .5, 100));
+		// this.scene.add(pointLight2);
+		// pointLight2.position.x = 0;
+		// pointLight2.position.y = -10;
+		// pointLight2.position.z = -10;
 
 
 	}
