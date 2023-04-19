@@ -11,6 +11,10 @@ import { DragControls } from 'three/addons/controls/DragControls.js';
 import Matter from 'matter-js';
 
 
+import default_vertex_shader from './shaders/default.vert';
+import eye_frag_shader from './shaders/eye.frag';
+import mouth_frag_shader from './shaders/mouth.frag';
+
 THREE.Vector2.prototype.angleTo = function (v2) {
 	let angle = Math.atan2(v2.y - this.y, v2.x - this.x);
 	return angle;
@@ -147,12 +151,14 @@ export class Cell {
 	private engine: Matter.Engine;
 	private scene: THREE.Scene;
 	private finger_material: any;
+	private cell_uniforms: any;
 
 
 
-	constructor(settings, gui, camera, renderer, world, engine, scene) {
+	constructor(settings, gui, camera, renderer, world, engine, scene, cell_uniforms) {
 		this.root = new THREE.Object3D()
 		this.scene = scene
+		this.cell_uniforms = cell_uniforms
 		this.gui = gui
 		this.settings = settings
 		this.camera = camera
@@ -258,6 +264,7 @@ export class Cell {
 		this.updatePillConstraints(pill)
 		this.updatePillHelper(pill)
 		this.updatePillFace(pill)
+		this.updatePillLight(pill)
 
 	}
 
@@ -516,7 +523,11 @@ export class Cell {
 
 	buildPill(joint_index_a, joint_index_b, prev_pill) {
 
+
 		let pill = new THREE.Group()
+
+		pill.pill_light_enabled = joint_index_a % 2 == 0
+
 		pill.v1_index = joint_index_a
 		pill.v2_index = joint_index_b
 		pill._index = joint_index_a
@@ -551,6 +562,11 @@ export class Cell {
 			// slop: 0.1,
 		});
 
+		pill.matter_tip_light = Matter.Bodies.circle(midpoint.x, midpoint.y, 0.2, {
+			airFriction: 0.01,
+		});
+
+
 		pill.matter_constraint = Matter.Constraint.create({
 			pointA: pill.base_target_point,
 			bodyB: pill.matter_base,
@@ -575,13 +591,24 @@ export class Cell {
 		});
 
 
-		pill.matter_tip.collisionFilter.group = 0;
-		pill.matter_base.collisionFilter.group = 0;
 
-		pill.matter_tip.collisionFilter.category = 0x0003;
+		pill.matter_constraint_light = Matter.Constraint.create({
+			pointA: pill.matter_tip.position,
+			bodyB: pill.matter_tip_light,
+			length: 0,
+			stiffness: 0.005,
+			damping: 0.01
+		});
 
-		pill.matter_base.collisionFilter.category = 0x0001;
-		pill.matter_tip.collisionFilter.category = 0x0002;
+
+		pill.matter_tip_light.collisionFilter.group = -1;
+		pill.matter_tip.collisionFilter.group = -1;
+		pill.matter_base.collisionFilter.group = -1;
+
+
+		// pill.matter_base.collisionFilter.category = 0x0001;
+		// pill.matter_tip.collisionFilter.category = ~1;
+		// pill.matter_tip_light.collisionFilter.category = ~1;
 
 
 
@@ -628,9 +655,43 @@ export class Cell {
 
 
 
-		Matter.Composite.add(this.world, [pill.matter_base, pill.matter_tip, pill.matter_constraint, pill.matter_constraint_tip, pill.matter_constraint_2]);
+		Matter.Composite.add(this.world, [
+			pill.matter_base,
+			pill.matter_tip,
+			pill.matter_constraint,
+			pill.matter_constraint_tip,
+			pill.matter_constraint_2,
+			pill.matter_tip_light,
+			pill.matter_constraint_light
+		]);
+
+		//build pill light
+		if (pill.pill_light_enabled) {
+			let pill_light = new THREE.PointLight(new THREE.Color(0.5 + Math.random() * .5, 0.5 + Math.random() * .5, 1), 0.6, 4)
+			pill_light.position.set(0, 0, 0)
+			this.root.add(pill_light)
+			pill.light = pill_light
+
+			// let pill_light_mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }))
+			// // pill_light_mesh.material.wireframe = true
+			// this.root.add(pill_light_mesh)
+			// pill_light_mesh.add(pill.light)
+			// pill.light_mesh = pill_light_mesh
+		}
+
 
 		return pill
+	}
+
+	updatePillLight(pill) {
+		if (!pill.pill_light_enabled) return
+
+		// let tip_normal = new THREE.Vector3().set(pill.matter_tip.position.x, pill.matter_tip.position.y, 0).sub(new THREE.Vector3().set(pill.matter_base.position.x, pill.matter_base.position.y, 0)).normalize()
+
+		pill.light.position.set(pill.matter_tip_light.position.x, pill.matter_tip_light.position.y, 0)
+
+		// pill.light_mesh.position.copy(new THREE.Vector3(pill.matter_tip.position.x, pill.matter_tip.position.y, 0)).lerp(new THREE.Vector3().set(pill.matter_base.position.x, pill.matter_base.position.y, 0), -2Z)
+
 	}
 
 	buildFingerMaterial() {
@@ -667,8 +728,8 @@ export class Cell {
 		material.extensions.derivatives = true;
 		this.finger_material = material
 
-		console.log(this.gui)
-		this.settings.thicknessAmbient = 0.1
+
+		this.settings.thicknessAmbient = 0.3
 
 
 
@@ -723,9 +784,43 @@ export class Cell {
 
 	buildPillFace(pill) {
 		let { midpoint, max_height_point } = this.getPillVertices(pill)
+		let seed = Math.random() * 10.0
 
-		let eye_material = new THREE.MeshBasicMaterial({ color: 0xffffff })
-		let mouth_material = new THREE.MeshBasicMaterial({ color: 0x00FFD8 })
+		let eye_material = new THREE.ShaderMaterial({
+			uniforms: {
+				time: this.cell_uniforms.time,
+				seed: { value: seed }
+			},
+			vertexShader: default_vertex_shader,
+			fragmentShader: eye_frag_shader,
+			transparent: true
+		})
+
+		let mouth_material = new THREE.ShaderMaterial({
+			uniforms: {
+				time: this.cell_uniforms.time,
+				seed: { value: Math.random() }
+			},
+			vertexShader: default_vertex_shader,
+			fragmentShader: mouth_frag_shader,
+			transparent: true
+		})
+
+
+
+		let eye_material2 = new THREE.ShaderMaterial({
+			uniforms: {
+				time: this.cell_uniforms.time,
+				seed: { value: seed + 0.1 }
+			},
+			vertexShader: default_vertex_shader,
+			fragmentShader: eye_frag_shader,
+			transparent: true
+		})
+
+
+
+
 
 		// eye_material.depthWrite = false
 		// eye_material.depthTest = false
@@ -733,12 +828,12 @@ export class Cell {
 		// mouth_material.depthWrite = false
 		// mouth_material.depthTest = false
 
-		let left_eye_geom = new THREE.PlaneGeometry(1, 1, 4, 4)
-		let right_eye_geom = new THREE.PlaneGeometry(1, 1, 4, 4)
-		let mouth_geom = new THREE.PlaneGeometry(1, 1, 4, 4)
+		let left_eye_geom = new THREE.PlaneGeometry(1, 1, 1, 1)
+		let right_eye_geom = new THREE.PlaneGeometry(1, 1, 1, 1)
+		let mouth_geom = new THREE.PlaneGeometry(1, 1, 1, 1)
 
 		let left_eye = new THREE.Mesh(left_eye_geom, eye_material)
-		let right_eye = new THREE.Mesh(right_eye_geom, eye_material)
+		let right_eye = new THREE.Mesh(right_eye_geom, eye_material2)
 		let mouth = new THREE.Mesh(mouth_geom, mouth_material)
 
 		left_eye.position.x = -0.75
@@ -909,6 +1004,7 @@ export class SampleLipidScene {
 	private runner: Matter.Runner;
 	private engine: Matter.Engine;
 	private world: Matter.World;
+	private uniforms: any;
 
 	constructor(canvas_el) {
 		console.log('constructing scene')
@@ -980,7 +1076,7 @@ export class SampleLipidScene {
 		axesHelper.position.y = 0
 		this.scene.add(axesHelper);
 
-		const light = new THREE.AmbientLight(new THREE.Color(0.6, 0.45, 0.45)); // soft white light
+		const light = new THREE.AmbientLight(new THREE.Color(1, 1, 1), 0.1); // soft white light
 		this.scene.add(light);
 		this.controls.enableRotate = settings.camera_rotation
 
@@ -995,7 +1091,12 @@ export class SampleLipidScene {
 		window.addEventListener('resize', this.resize.bind(this));
 
 
-		this.cell = new Cell(this.settings, this.gui, this.camera, this.renderer, this.world, this.engine, this.scene)
+		this.uniforms = {
+			time: { value: 0 },
+		}
+
+
+		this.cell = new Cell(this.settings, this.gui, this.camera, this.renderer, this.world, this.engine, this.scene, this.uniforms)
 		this.scene.add(this.cell.root)
 
 		this.animate(0)
@@ -1003,21 +1104,21 @@ export class SampleLipidScene {
 	}
 
 	buildLights() {
-		const pointLight1 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+		// const pointLight1 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
 
-		pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), 1.4, 6));
-		this.scene.add(pointLight1);
-		pointLight1.position.x = 0;
-		pointLight1.position.y = 3;
-		pointLight1.position.z = 0;
+		// pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), 1.4, 6));
+		// this.scene.add(pointLight1);
+		// pointLight1.position.x = 0;
+		// pointLight1.position.y = 3;
+		// pointLight1.position.z = 0;
 
-		const pointLight2 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+		// const pointLight2 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
 
-		pointLight2.add(new THREE.PointLight(new THREE.Color(1, 1, 1), 1.4, 40));
-		this.scene.add(pointLight2);
-		pointLight2.position.x = 5;
-		pointLight2.position.y = 26;
-		pointLight2.position.z = 10;
+		// pointLight2.add(new THREE.PointLight(new THREE.Color(1, 1, 1), 1.4, 40));
+		// this.scene.add(pointLight2);
+		// pointLight2.position.x = 5;
+		// pointLight2.position.y = 26;
+		// pointLight2.position.z = 10;
 
 		// const pointLight2 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
 		// pointLight2.add(new THREE.PointLight(new THREE.Color(1, 1, 1), .5, 100));
@@ -1048,8 +1149,10 @@ export class SampleLipidScene {
 		this.cell.animate();
 
 		requestAnimationFrame(this.animate.bind(this));
-		// this.cell.animate() 
-		Matter.Runner.tick(this.runner, this.engine, t)
+		Matter.Runner.tick(this.runner, this.engine, t);
+
+		this.uniforms.time.value = t / 1000
+
 	}
 
 	destroy() {
