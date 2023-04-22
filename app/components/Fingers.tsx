@@ -152,7 +152,11 @@ export class Cell {
 	private scene: THREE.Scene;
 	private finger_material: any;
 	private cell_uniforms: any;
-
+	private joints: any[] = [];
+	private joint_constraints: any[] = [];
+	private drag_start: THREE.Vector3 = new THREE.Vector3();
+	private drag_current: THREE.Vector3 = new THREE.Vector3();
+	private drag_index: number = -1;
 
 
 	constructor(settings, gui, camera, renderer, world, engine, scene, cell_uniforms) {
@@ -177,16 +181,31 @@ export class Cell {
 		let joint_drag_controls = new DragControls(this.joint_handles, this.camera, this.renderer.domElement);
 		joint_drag_controls.addEventListener('drag', function (event) {
 			event.object.position.z = 0
-			let joint_index = event.object._index
-			this.joints_buffer[joint_index * 3 + 0] = event.object.position.x
-			this.joints_buffer[joint_index * 3 + 1] = event.object.position.y
-			this.joints_buffer[joint_index * 3 + 2] = event.object.position.z
-
+			this.drag_current.x = event.object.position.x
+			this.drag_current.y = event.object.position.y
 		}.bind(this))
+
+
+		joint_drag_controls.addEventListener('dragstart', function (event) {
+			event.object.position.z = 0
+			let joint_index = event.object._index
+			this.drag_index = joint_index
+			this.drag_start.x = event.object.position.x
+			this.drag_start.y = event.object.position.y
+			this.drag_current.x = event.object.position.x
+			this.drag_current.y = event.object.position.y
+		}.bind(this))
+
+
+		joint_drag_controls.addEventListener('dragend', function (event) {
+			this.drag_index = -1
+		}.bind(this))
+
 
 		let height_drag_controls = new DragControls(this.pills.map((pill) => {
 			return pill.helper.height_handle
 		}), this.camera, this.renderer.domElement);
+
 
 		height_drag_controls.addEventListener('drag', function (event) {
 
@@ -194,15 +213,11 @@ export class Cell {
 			let { v0, v1, v2, v3, normal, prev_normal, next_normal, left_normal, right_normal, midpoint, left_intersection_point, right_intersection_point, max_height } = this.getPillVertices(pill)
 			let pos = event.object.position
 
-
 			let new_height = Math.min(pos.distanceTo(midpoint), max_height)
-
 
 			this.pill_height_buffer[pill._index] = new_height
 
-			// console.log(new_height, normal)
 			pill.helper.height_handle.position.copy(midpoint).add(normal.clone().multiplyScalar(new_height))
-
 
 		}.bind(this))
 	}
@@ -225,15 +240,58 @@ export class Cell {
 		this.joints_buffer = new Float32Array(this.settings.joint_count * 3); // 3 vertices per point
 		this.pill_height_buffer = new Float32Array(this.settings.joint_count - 1); // 3 vertices per point
 
+		var group = Matter.Body.nextGroup(true);
+
+
+		let root_point = new THREE.Vector3(0, 0, 0)
+
+
 		for (let i = 0; i < this.settings.joint_count; i++) {
-			this.joints_buffer[i * 3 + 0] = -this.settings.joint_count + i * 4
-			this.joints_buffer[i * 3 + 1] = Math.sin(i * 2) * 1
+			this.joints_buffer[i * 3 + 0] = -this.settings.joint_count + i * 3.4
+			this.joints_buffer[i * 3 + 1] = Math.sin(i * 2) * 0.5
+
+			this.joints[i] = Matter.Bodies.circle(this.joints_buffer[i * 3 + 0], this.joints_buffer[i * 3 + 1], 2)
+
+
+
 			this.createJointHelperHandle(i)
 		}
 
+
+		let left_point = new THREE.Vector3(-20, 0, 0)
+		this.joint_constraints.push(Matter.Constraint.create({
+			pointA: left_point,
+			bodyB: this.joints[0],
+			length: 0,
+			stiffness: 0.04,
+			damping: 0.01
+		}))
+
+
+		let right_point = new THREE.Vector3(20, 0, 0)
+		this.joint_constraints.push(Matter.Constraint.create({
+			pointA: right_point,
+			bodyB: this.joints[this.joints.length - 1],
+			length: 0,
+			stiffness: 0.04,
+			damping: 0.01
+		}))
+
+
+
 		for (let i = 0; i < this.settings.joint_count - 1; i++) {
 			this.pill_height_buffer[i] = 2 + Math.sin(i * 2) * .5
+
+			this.joint_constraints.push(Matter.Constraint.create({
+				bodyA: this.joints[i],
+				bodyB: this.joints[i + 1],
+				length: 1 + Math.random() * 3,
+				stiffness: 0.01,
+				damping: 0.01
+			}))
 		}
+
+		Matter.Composite.add(this.world, this.joint_constraints)
 
 		this.buildJointHelpers()
 	}
@@ -248,11 +306,30 @@ export class Cell {
 		this.joints_line = line
 	}
 
-
-
 	animate() {
 		this.joints_line.geometry.attributes.position.needsUpdate = true;
+		this.updateJoints()
 		this.updatePills()
+		this.updateDrag()
+	}
+
+	updateDrag() {
+		if (this.drag_index >= 0) {
+			this.joints[this.drag_index].position.x = this.drag_current.x
+			this.joints[this.drag_index].position.y = this.drag_current.y
+		}
+	}
+
+	updateJoints() {
+		for (let i = 0; i < this.settings.joint_count; i++) {
+			this.joints_buffer[i * 3 + 0] = this.joints[i].position.x
+			this.joints_buffer[i * 3 + 1] = this.joints[i].position.y
+			this.joint_handles[i].position.copy(this.joints[i].position)
+			this.joint_handles[i].position.z = 0
+
+			this.joints[i].position.y += 0.02 * Math.sin(Matter.Common.now() * 0.0003 + this.joints[i].position.x * 0.2)
+
+		}
 	}
 
 	updatePills() {
@@ -671,14 +748,7 @@ export class Cell {
 			pill_light.position.set(0, 0, 0)
 			this.root.add(pill_light)
 			pill.light = pill_light
-
-			// let pill_light_mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }))
-			// // pill_light_mesh.material.wireframe = true
-			// this.root.add(pill_light_mesh)
-			// pill_light_mesh.add(pill.light)
-			// pill.light_mesh = pill_light_mesh
 		}
-
 
 		return pill
 	}
@@ -693,6 +763,8 @@ export class Cell {
 		// pill.light_mesh.position.copy(new THREE.Vector3(pill.matter_tip.position.x, pill.matter_tip.position.y, 0)).lerp(new THREE.Vector3().set(pill.matter_base.position.x, pill.matter_base.position.y, 0), -2Z)
 
 	}
+
+
 
 	buildFingerMaterial() {
 		if (this.finger_material) return this.finger_material
@@ -886,10 +958,13 @@ export class Cell {
 
 	}
 
-
 	buildPills() {
 		let pill = undefined
+
+
 		for (let i = 1; i < this.settings.joint_count; i++) {
+
+
 			pill = this.buildPill(i - 1, i, pill)
 			this.buildPillFace(pill)
 		}
@@ -1012,9 +1087,11 @@ export class SampleLipidScene {
 		this.width = canvas_el.clientWidth;
 		this.height = canvas_el.clientHeight;
 		let settings = {
+			joint_stiffness: 0.1,
+			joint_spacing: 0.1,
 			thicknessAmbient: 0.1,
 			camera_rotation: false,
-			joint_count: 10,
+			joint_count: 14,
 		}
 		this.settings = settings
 		let gui = new GUI();
