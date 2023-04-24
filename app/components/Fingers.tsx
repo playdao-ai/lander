@@ -7,19 +7,27 @@ import { SubsurfaceScatteringShader } from 'three/addons/shaders/SubsurfaceScatt
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import Stats from 'three/addons/libs/stats.module.js';
 import { DragControls } from 'three/addons/controls/DragControls.js';
+import { LightProbeGenerator } from 'three/addons/lights/LightProbeGenerator.js';
+import { MarchingCubes } from 'three/addons/objects/MarchingCubes.js';
+
 
 import Matter from 'matter-js';
-
+import MatterAttractors from 'matter-attractors'
+Matter.use(MatterAttractors)
 
 import default_vertex_shader from './shaders/default.vert';
 import eye_frag_shader from './shaders/eye.frag';
 import mouth_frag_shader from './shaders/mouth.frag';
+import water_frag_shader from './shaders/water.frag';
+import tree_vert_shader from './shaders/tree.vert';
+import tree_frag_shader from './shaders/tree.frag';
 
 THREE.Vector2.prototype.angleTo = function (v2) {
 	let angle = Math.atan2(v2.y - this.y, v2.x - this.x);
 	return angle;
 }
 
+const CENTER = new THREE.Vector3(0, 0, 0)
 
 Math.lerp = function (start, end, t) {
 	return (1 - t) * start + t * end;
@@ -148,18 +156,24 @@ export class Cell {
 	private joint_handles: THREE.Mesh[] = [];
 	private pills: THREE.Mesh[] = [];
 	private world: Matter.World;
+	private blob_world: Matter.World;
 	private engine: Matter.Engine;
 	private scene: THREE.Scene;
 	private finger_material: any;
 	private cell_uniforms: any;
+	private raycaster: THREE.Raycaster = new THREE.Raycaster();
 	private joints: any[] = [];
 	private joint_constraints: any[] = [];
 	private drag_start: THREE.Vector3 = new THREE.Vector3();
 	private drag_current: THREE.Vector3 = new THREE.Vector3();
 	private drag_index: number = -1;
+	private blob_parts: any[] = [];
+	private blob: THREE.Mesh;
+	private runner: Matter.Runner;
+	private blob_engine: Matter.Engine;
 
 
-	constructor(settings, gui, camera, renderer, world, engine, scene, cell_uniforms) {
+	constructor(settings, gui, camera, renderer, scene, cell_uniforms) {
 		this.root = new THREE.Object3D()
 		this.scene = scene
 		this.cell_uniforms = cell_uniforms
@@ -167,17 +181,48 @@ export class Cell {
 		this.settings = settings
 		this.camera = camera
 		this.renderer = renderer
+
+
+		this.runner = Matter.Runner.create();
+
+		let engine = Matter.Engine.create()
+		let world = engine.world
+
+		let blob_engine = Matter.Engine.create()
+		this.blob_world = blob_engine.world
+
+
 		this.world = world
+		this.blob_engine = blob_engine
+
+
 		this.engine = engine
+		this.engine.gravity.scale = 0
+
+		this.engine = engine
+		this.blob_world.gravity.scale = 0
+
 
 		this.buildJoints()
 		this.buildPills()
+		this.buildBlob()
 		// this.buildFrames()
 		this.buildDragControls()
-		this.animate()
+		this.initJointPositions()
 	}
 
 	buildDragControls() {
+
+
+		window.addEventListener('mousedown', () => {
+			this.mouse_down = true
+		});
+
+		window.addEventListener('mouseup', () => {
+			this.mouse_down = false
+		})
+
+
 		let joint_drag_controls = new DragControls(this.joint_handles, this.camera, this.renderer.domElement);
 		joint_drag_controls.addEventListener('drag', function (event) {
 			event.object.position.z = 0
@@ -202,24 +247,24 @@ export class Cell {
 		}.bind(this))
 
 
-		let height_drag_controls = new DragControls(this.pills.map((pill) => {
-			return pill.helper.height_handle
-		}), this.camera, this.renderer.domElement);
+		// let height_drag_controls = new DragControls(this.pills.map((pill) => {
+		// 	return pill.helper.height_handle
+		// }), this.camera, this.renderer.domElement);
 
 
-		height_drag_controls.addEventListener('drag', function (event) {
+		// height_drag_controls.addEventListener('drag', function (event) {
 
-			let pill = event.object.pill
-			let { v0, v1, v2, v3, normal, prev_normal, next_normal, left_normal, right_normal, midpoint, left_intersection_point, right_intersection_point, max_height } = this.getPillVertices(pill)
-			let pos = event.object.position
+		// 	let pill = event.object.pill
+		// 	let { v0, v1, v2, v3, normal, prev_normal, next_normal, left_normal, right_normal, midpoint, left_intersection_point, right_intersection_point, max_height } = this.getPillVertices(pill)
+		// 	let pos = event.object.position
 
-			let new_height = Math.min(pos.distanceTo(midpoint), max_height)
+		// 	let new_height = Math.min(pos.distanceTo(midpoint), max_height)
 
-			this.pill_height_buffer[pill._index] = new_height
+		// 	this.pill_height_buffer[pill._index] = new_height
 
-			pill.helper.height_handle.position.copy(midpoint).add(normal.clone().multiplyScalar(new_height))
+		// 	pill.helper.height_handle.position.copy(midpoint).add(normal.clone().multiplyScalar(new_height))
 
-		}.bind(this))
+		// }.bind(this))
 	}
 
 
@@ -240,58 +285,49 @@ export class Cell {
 		this.joints_buffer = new Float32Array(this.settings.joint_count * 3); // 3 vertices per point
 		this.pill_height_buffer = new Float32Array(this.settings.joint_count - 1); // 3 vertices per point
 
-		var group = Matter.Body.nextGroup(true);
-
-
-		let root_point = new THREE.Vector3(0, 0, 0)
-
 
 		for (let i = 0; i < this.settings.joint_count; i++) {
-			this.joints_buffer[i * 3 + 0] = -this.settings.joint_count + i * 3.4
-			this.joints_buffer[i * 3 + 1] = Math.sin(i * 2) * 0.5
-
 			this.joints[i] = Matter.Bodies.circle(this.joints_buffer[i * 3 + 0], this.joints_buffer[i * 3 + 1], 2)
 
-
-
-			this.createJointHelperHandle(i)
+			// this.createJointHelperHandle(i)
 		}
 
 
-		let left_point = new THREE.Vector3(-20, 0, 0)
-		this.joint_constraints.push(Matter.Constraint.create({
-			pointA: left_point,
-			bodyB: this.joints[0],
-			length: 0,
-			stiffness: 0.04,
-			damping: 0.01
-		}))
 
 
-		let right_point = new THREE.Vector3(20, 0, 0)
-		this.joint_constraints.push(Matter.Constraint.create({
-			pointA: right_point,
-			bodyB: this.joints[this.joints.length - 1],
-			length: 0,
-			stiffness: 0.04,
-			damping: 0.01
-		}))
+		// let left_point = new THREE.Vector3(-30, 0, 0)
+		// this.joint_constraints.push(Matter.Constraint.create({
+		// 	pointA: left_point,
+		// 	bodyB: this.joints[0],
+		// 	length: 0,
+		// 	stiffness: 0.04,
+		// 	damping: 0.01
+		// }))
+
+
+		// let right_point = new THREE.Vector3(30, 0, 0)
+		// this.joint_constraints.push(Matter.Constraint.create({
+		// 	pointA: right_point,
+		// 	bodyB: this.joints[this.joints.length - 1],
+		// 	length: 0,
+		// 	stiffness: 0.04,
+		// 	damping: 0.01
+		// }))
 
 
 
 		for (let i = 0; i < this.settings.joint_count - 1; i++) {
-			this.pill_height_buffer[i] = 2 + Math.sin(i * 2) * .5
+			this.pill_height_buffer[i] = 1 + Math.sin(i * 2) * .5
 
-			this.joint_constraints.push(Matter.Constraint.create({
-				bodyA: this.joints[i],
-				bodyB: this.joints[i + 1],
-				length: 1 + Math.random() * 3,
-				stiffness: 0.01,
-				damping: 0.01
-			}))
+			// this.joint_constraints.push(Matter.Constraint.create({
+			// 	bodyA: this.joints[i],
+			// 	bodyB: this.joints[i + 1],
+			// 	length: Math.random() * 4,
+			// 	stiffness: 0.01,
+			// }))
 		}
 
-		Matter.Composite.add(this.world, this.joint_constraints)
+		// Matter.Composite.add(this.world, this.joint_constraints)
 
 		this.buildJointHelpers()
 	}
@@ -306,11 +342,20 @@ export class Cell {
 		this.joints_line = line
 	}
 
-	animate() {
+	animate(t) {
+		this.time = t
+		Matter.Runner.tick(this.runner, this.engine, t);
+		Matter.Runner.tick(this.runner, this.blob_engine, t);
 		this.joints_line.geometry.attributes.position.needsUpdate = true;
 		this.updateJoints()
 		this.updatePills()
+		this.updateBlob()
+		this.projectJointsOnBlob()
 		this.updateDrag()
+	}
+
+	destroy() {
+		Matter.Runner.stop(this.runner);
 	}
 
 	updateDrag() {
@@ -324,10 +369,10 @@ export class Cell {
 		for (let i = 0; i < this.settings.joint_count; i++) {
 			this.joints_buffer[i * 3 + 0] = this.joints[i].position.x
 			this.joints_buffer[i * 3 + 1] = this.joints[i].position.y
-			this.joint_handles[i].position.copy(this.joints[i].position)
-			this.joint_handles[i].position.z = 0
+			// this.joint_handles[i].position.copy(this.joints[i].position)
+			// this.joint_handles[i].position.z = 0
 
-			this.joints[i].position.y += 0.02 * Math.sin(Matter.Common.now() * 0.0003 + this.joints[i].position.x * 0.2)
+			// this.joints[i].position.y += 0.02 * Math.sin(Matter.Common.now() * 0.0003 + this.joints[i].position.x * 0.2)
 
 		}
 	}
@@ -339,7 +384,7 @@ export class Cell {
 
 	updatePill(pill) {
 		this.updatePillConstraints(pill)
-		this.updatePillHelper(pill)
+		// this.updatePillHelper(pill)
 		this.updatePillFace(pill)
 		this.updatePillLight(pill)
 
@@ -610,9 +655,9 @@ export class Cell {
 		pill._index = joint_index_a
 		pill._prev = prev_pill
 		if (prev_pill) prev_pill._next = pill
-		let pill_helper = this.buildPillHelper(pill)
+		// let pill_helper = this.buildPillHelper(pill)
 		// this.root.add(pill_helper)
-		pill.helper = pill_helper
+		// pill.helper = pill_helper
 		pill.height = Math.abs(Math.sin(joint_index_a * 2) * 2)
 		this.root.add(pill)
 		this.pills.push(pill)
@@ -689,7 +734,7 @@ export class Cell {
 
 
 
-		let sides = 32
+		let sides = 24
 		pill.sides = sides
 
 
@@ -963,11 +1008,215 @@ export class Cell {
 
 
 		for (let i = 1; i < this.settings.joint_count; i++) {
-
+			// if (i %  == 0) continue
 
 			pill = this.buildPill(i - 1, i, pill)
 			this.buildPillFace(pill)
 		}
+	}
+
+
+	buildBlob() {
+		const loader = new THREE.TextureLoader();
+
+		let r = '';
+		const urls = [
+			r + 'px.png', r + 'nx.png',
+			r + 'py.png', r + 'ny.png',
+			r + 'pz.png', r + 'nz.png'
+		];
+
+
+		let substrate_material = new THREE.ShaderMaterial({
+			uniforms: {
+				colorMap: {
+					value: [
+						new THREE.Color("#427062"),
+						new THREE.Color("#33594E"),
+						new THREE.Color("#234549"),
+						new THREE.Color("#1E363F"),
+					],
+				},
+				brightnessThresholds: {
+					value: [0.9, 0.45, 0.001],
+				},
+				lightPosition: { value: new THREE.Vector3(15, 15, 15) },
+			},
+
+			vertexShader: tree_vert_shader,
+			fragmentShader: tree_frag_shader,
+
+		})
+
+		let test_mat = new THREE.MeshBasicMaterial({
+			color: 0x00ff00, transparent: true,
+			opacity: 0.1
+		})
+
+
+		const colors = new Uint8Array(6);
+
+		for (let c = 0; c <= colors.length; c++) {
+			colors[c] = (c / colors.length) * 256;
+		}
+
+		const format = THREE.RedFormat
+		const gradientMap = new THREE.DataTexture(colors, colors.length, 1, format);
+		gradientMap.needsUpdate = true;
+
+		// basic monochromatic energy preservation
+		const diffuseColor = new THREE.Color().setHSL(0.4, 0.5, 0.5)
+
+
+		const toon_material = new THREE.MeshToonMaterial({
+			color: diffuseColor,
+			aoMapIntensity: 1,
+			gradientMap: gradientMap,
+			transparency: true
+		});
+
+		toon_material.opacity = 0.5
+
+
+		const finger_material = this.buildFingerMaterial()
+
+		// const textureCube = new THREE.CubeTextureLoader().load(urls, function () {
+		// 	this.scene.background = textureCube;
+
+		// 	let lightProbe = new THREE.LightProbe();
+		// 	this.scene.add(lightProbe);
+		// 	console.log('add lightprob')
+
+		// 	lightProbe.copy(LightProbeGenerator.fromCubeTexture(textureCube));
+		// }.bind(this));
+
+		// textureCube.mapping = THREE.CubeRefractionMapping;
+
+		let resolution = 42
+		let blob = new MarchingCubes(resolution, finger_material, true, true, 3000);
+		blob.position.set(0, 0, 0);
+		blob.position.set(0, 0, 0)
+		blob.scale.set(20, 20, 20);
+		blob.enableUvs = false;
+		blob.enableColors = false;
+		this.blob = blob;
+		this.root.add(blob);
+
+
+
+		for (let i = 0; i < this.settings.blob_parts; i++) {
+			let blob_part = Matter.Bodies.circle(-1 + Math.random() * 2, -1 + Math.random() * 2, 1.0, {
+				// airFriction: 0.1,
+				// slop: 0.1,
+				collisiontFilter: {
+					group: -1
+				}
+			})
+
+			let constraint = Matter.Constraint.create({
+				pointA: { x: 0, y: 0 },
+				bodyB: blob_part,
+				length: 1,
+				stiffness: 0.0003,
+				damping: 0.001
+			})
+
+			blob_part.constraint = constraint
+			this.blob_parts.push(blob_part)
+			Matter.World.add(this.blob_world, blob_part)
+			Matter.World.add(this.blob_world, constraint)
+		}
+
+		for (let i = 0; i < this.settings.blob_parts; i++) {
+			for (let j = 0; j < this.settings.blob_parts; j++) {
+				if (i == j) {
+					continue
+				}
+
+				let constraint = Matter.Constraint.create({
+					bodyA: this.blob_parts[i],
+					bodyB: this.blob_parts[j],
+					length: 4,
+					stiffness: 0.001,
+					damping: 0.001
+				})
+
+				Matter.World.add(this.blob_world, constraint)
+			}
+		}
+
+
+
+
+
+
+	}
+
+	updateBlob() {
+		this.blob.reset()
+		for (let i = 0; i < this.blob_parts.length; i++) {
+			let x = this.blob_parts[i].position.x / (20 * 1)
+			let y = this.blob_parts[i].position.y / (20 * 1)
+			this.blob.addBall(.5 + x, .5 + y, .5, 1.0, 12.0);
+
+			let force = new THREE.Vector2(this.blob_parts[i].position.x, this.blob_parts[i].position.y).normalize().multiplyScalar(0.0000001)
+
+			if (this.mouse_down) {
+				// console.log('test')
+				Matter.Body.applyForce(this.blob_parts[i], this.blob_parts[i].position, force)
+			}
+		}
+		this.blob.update();
+	}
+
+	initJointPositions() {
+		let c_r = 10
+		let origin = new THREE.Vector3()
+		for (let i = 0; i < this.joints.length; i++) {
+			this.joints[i].position.x = Math.cos(-(Math.PI * 2) / this.joints.length * i) * c_r
+			this.joints[i].position.y = Math.sin(-(Math.PI * 2) / this.joints.length * i) * c_r
+			this.joints_buffer[i * 3 + 0] = this.joints[i].position.x
+			this.joints_buffer[i * 3 + 1] = this.joints[i].position.y
+			this.joints_buffer[i * 3 + 2] = 0
+		}
+	}
+
+	projectJointsOnBlob() {
+		this.raycaster.firstHitOnly = true
+		let c_r = 20
+		let origin = new THREE.Vector3()
+		// let origin_lerp = new THREE.Vector3()
+		let normal = new THREE.Vector3()
+		// let raycaster_intersections = [new THREE.Vector3]
+
+		this.step = this.step || 0
+		this.step++
+
+		// console.log(Math.floor(step) % this.joints.length)
+
+		let i = this.step
+		i = i % this.joints.length
+		origin.x = Math.cos(-(Math.PI * 2) / this.joints.length * i) * c_r
+		origin.y = Math.sin(-(Math.PI * 2) / this.joints.length * i) * c_r
+		origin.z = 0
+		normal.copy(origin).lerp(CENTER, 0.1).sub(origin).normalize()
+		this.raycaster.set(origin, normal)
+		// console.log(normal)
+		let raycaster_intersections = this.raycaster.intersectObject(this.blob, false)
+
+		if (raycaster_intersections.length > 0) {
+
+			origin.copy(this.joints[i].position)
+			origin.z = 0
+			origin.copy(raycaster_intersections[0].point)
+			this.joints[i].position.x = origin.x
+			this.joints[i].position.y = origin.y
+
+			// this.joints_buffer[i * 3 + 0] = raycaster_intersections[0].point.x
+			// this.joints_buffer[i * 3 + 1] = raycaster_intersections[0].point.y
+			// this.joints_buffer[i * 3 + 2] = 0
+		}
+
 	}
 
 
@@ -1091,7 +1340,8 @@ export class SampleLipidScene {
 			joint_spacing: 0.1,
 			thicknessAmbient: 0.1,
 			camera_rotation: false,
-			joint_count: 14,
+			joint_count: 24,
+			blob_parts: 3,
 		}
 		this.settings = settings
 		let gui = new GUI();
@@ -1146,6 +1396,8 @@ export class SampleLipidScene {
 		grid.material.color = new THREE.Color(0x404040)
 		this.scene.add(grid);
 
+		this.scene = new THREE.Scene();
+
 
 		this.buildLights()
 
@@ -1153,17 +1405,10 @@ export class SampleLipidScene {
 		axesHelper.position.y = 0
 		this.scene.add(axesHelper);
 
-		const light = new THREE.AmbientLight(new THREE.Color(1, 1, 1), 0.1); // soft white light
-		this.scene.add(light);
+		// const light = new THREE.AmbientLight(new THREE.Color(1, 1, 1), 0.1); // soft white light
+		// this.scene.add(light);
 		this.controls.enableRotate = settings.camera_rotation
 
-		let engine = Matter.Engine.create()
-		let world = engine.world
-
-		this.runner = Matter.Runner.create();
-		this.world = world
-		this.engine = engine
-		this.engine.gravity.scale = 0
 
 		window.addEventListener('resize', this.resize.bind(this));
 
@@ -1173,7 +1418,7 @@ export class SampleLipidScene {
 		}
 
 
-		this.cell = new Cell(this.settings, this.gui, this.camera, this.renderer, this.world, this.engine, this.scene, this.uniforms)
+		this.cell = new Cell(this.settings, this.gui, this.camera, this.renderer, this.scene, this.uniforms)
 		this.scene.add(this.cell.root)
 
 		this.animate(0)
@@ -1183,27 +1428,11 @@ export class SampleLipidScene {
 	buildLights() {
 		// const pointLight1 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
 
-		// pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), 1.4, 6));
+		// pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), 1.4, 30));
 		// this.scene.add(pointLight1);
 		// pointLight1.position.x = 0;
-		// pointLight1.position.y = 3;
+		// pointLight1.position.y = 20;
 		// pointLight1.position.z = 0;
-
-		// const pointLight2 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-
-		// pointLight2.add(new THREE.PointLight(new THREE.Color(1, 1, 1), 1.4, 40));
-		// this.scene.add(pointLight2);
-		// pointLight2.position.x = 5;
-		// pointLight2.position.y = 26;
-		// pointLight2.position.z = 10;
-
-		// const pointLight2 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-		// pointLight2.add(new THREE.PointLight(new THREE.Color(1, 1, 1), .5, 100));
-		// this.scene.add(pointLight2);
-		// pointLight2.position.x = 0;
-		// pointLight2.position.y = -10;
-		// pointLight2.position.z = -10;
-
 
 	}
 
@@ -1220,13 +1449,15 @@ export class SampleLipidScene {
 			return;
 		}
 
+
+
 		this.controls.update();
 		this.renderer.render(this.scene, this.camera);
 		this.camera.updateProjectionMatrix()
-		this.cell.animate();
+		this.cell.animate(t);
 
 		requestAnimationFrame(this.animate.bind(this));
-		Matter.Runner.tick(this.runner, this.engine, t);
+
 
 		this.uniforms.time.value = t / 1000
 
@@ -1235,7 +1466,7 @@ export class SampleLipidScene {
 	destroy() {
 		console.log('destroying scene')
 		// this.canvas_el.remove();
-		Matter.Runner.stop(this.runner);
+		this.cell.destroy();
 		this.stop = true;
 		this.gui.destroy();
 	}
