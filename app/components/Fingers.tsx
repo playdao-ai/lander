@@ -10,6 +10,7 @@ import { DragControls } from 'three/addons/controls/DragControls.js';
 import { LightProbeGenerator } from 'three/addons/lights/LightProbeGenerator.js';
 import { MarchingCubes } from 'three/addons/objects/MarchingCubes.js';
 
+import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 
 import Matter from 'matter-js';
 import MatterAttractors from 'matter-attractors'
@@ -21,6 +22,12 @@ import mouth_frag_shader from './shaders/mouth.frag';
 import water_frag_shader from './shaders/water.frag';
 import tree_vert_shader from './shaders/tree.vert';
 import tree_frag_shader from './shaders/tree.frag';
+import plugin from 'tailwindcss';
+
+
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
 THREE.Vector2.prototype.angleTo = function (v2) {
 	let angle = Math.atan2(v2.y - this.y, v2.x - this.x);
@@ -31,6 +38,13 @@ const CENTER = new THREE.Vector3(0, 0, 0)
 
 Math.lerp = function (start, end, t) {
 	return (1 - t) * start + t * end;
+}
+
+Math.smoothstep = function (x, min, max) {
+	if (x <= min) return 0;
+	if (x >= max) return 1;
+	x = (x - min) / (max - min);
+	return x * x * (3 - 2 * x);
 }
 
 Math.step = function (x, y) {
@@ -171,6 +185,9 @@ export class Cell {
 	private blob: THREE.Mesh;
 	private runner: Matter.Runner;
 	private blob_engine: Matter.Engine;
+	private mouse_down: boolean = false;
+	private screen_mouse: THREE.Vector2 = new THREE.Vector2();
+	private world_mouse: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
 
 
 	constructor(settings, gui, camera, renderer, scene, cell_uniforms) {
@@ -182,6 +199,7 @@ export class Cell {
 		this.camera = camera
 		this.renderer = renderer
 
+		this.raycaster.firstHitOnly = true
 
 		this.runner = Matter.Runner.create();
 
@@ -211,6 +229,16 @@ export class Cell {
 		this.initJointPositions()
 	}
 
+	screenToWorld(screen_vec: THREE.Vector2, world_vec: THREE.Vector3 = new THREE.Vector3()) {
+		world_vec.copy(screen_vec)
+		world_vec.x = (world_vec.x / window.innerWidth) * 2 - 1;
+		world_vec.y = -(world_vec.y / window.innerHeight) * 2 + 1;
+		world_vec.z = 0.5
+		world_vec.unproject(this.camera)
+
+		return world_vec
+	}
+
 	buildDragControls() {
 
 
@@ -220,6 +248,11 @@ export class Cell {
 
 		window.addEventListener('mouseup', () => {
 			this.mouse_down = false
+		})
+
+		window.addEventListener('mousemove', (e) => {
+			this.screen_mouse.set(e.screenX, e.screenY)
+			this.screenToWorld(this.screen_mouse, this.world_mouse)
 		})
 
 
@@ -329,7 +362,7 @@ export class Cell {
 
 		// Matter.Composite.add(this.world, this.joint_constraints)
 
-		this.buildJointHelpers()
+		// this.buildJointHelpers()
 	}
 
 	buildJointHelpers() {
@@ -346,7 +379,7 @@ export class Cell {
 		this.time = t
 		Matter.Runner.tick(this.runner, this.engine, t);
 		Matter.Runner.tick(this.runner, this.blob_engine, t);
-		this.joints_line.geometry.attributes.position.needsUpdate = true;
+		this.joints_line ? this.joints_line.geometry.attributes.position.needsUpdate = true : null
 		this.updateJoints()
 		this.updatePills()
 		this.updateBlob()
@@ -384,10 +417,8 @@ export class Cell {
 
 	updatePill(pill) {
 		this.updatePillConstraints(pill)
-		// this.updatePillHelper(pill)
 		this.updatePillFace(pill)
 		this.updatePillLight(pill)
-
 	}
 
 	updatePillConstraints(pill) {
@@ -418,6 +449,12 @@ export class Cell {
 		let sides = pill.sides
 
 		let [p1, p2, angle] = findExternalTangents(tippoint, pill.tip_radius, basepoint, pill.base_radius)
+
+
+
+
+		// let tangent_angle = p2.angleTo(p1)
+		pill.tangent_angle = angle
 
 		let basepoint_normal = new THREE.Vector3().subVectors(tippoint, basepoint).normalize()
 
@@ -471,13 +508,7 @@ export class Cell {
 		pill.base.scale.z = pill.base_radius
 
 
-		// pill.cylinder.scale.x = 1
-		// pill.cylinder.scale.y = 1
-		// pill.cylinder.scale.z = 1
 
-
-
-		// pill.matter_constraint_2.length = pill.base_radius + pill.tip_radius
 
 	}
 
@@ -524,7 +555,7 @@ export class Cell {
 
 		pill.helper.height_handle.position.copy(tip_position)
 
-		pill.top_position = pill.helper.height_handle.position
+
 
 		let [p1, p2, tan_angle] = findExternalTangents(midpoint, base_radius, tip_position, pill.tip_radius)
 
@@ -648,7 +679,8 @@ export class Cell {
 
 		let pill = new THREE.Group()
 
-		pill.pill_light_enabled = joint_index_a % 2 == 0
+		// pill.pill_light_enabled = joint_index_a % 2 == 0
+		pill.pill_light_enabled = true
 
 		pill.v1_index = joint_index_a
 		pill.v2_index = joint_index_b
@@ -693,33 +725,31 @@ export class Cell {
 			pointA: pill.base_target_point,
 			bodyB: pill.matter_base,
 			length: 0,
-			stiffness: 0.001,
-			damping: 0.01
+			stiffness: 0.03,
+			damping: 0.05
 		});
 
 		pill.matter_constraint_2 = Matter.Constraint.create({
 			bodyA: pill.matter_base,
 			bodyB: pill.matter_tip,
-			stiffness: 0.00004,
-			damping: 0.001
+			stiffness: 0.0001,
+			damping: 0.05
 		});
 
 		pill.matter_constraint_tip = Matter.Constraint.create({
 			pointA: pill.tip_target_point,
 			bodyB: pill.matter_tip,
 			length: 0,
-			stiffness: 0.001,
-			damping: 0.001
+			stiffness: 0.03,
+			damping: 0.05
 		});
-
-
 
 		pill.matter_constraint_light = Matter.Constraint.create({
 			pointA: pill.matter_tip.position,
 			bodyB: pill.matter_tip_light,
 			length: 0,
-			stiffness: 0.005,
-			damping: 0.01
+			stiffness: 0.1,
+			damping: 0.4
 		});
 
 
@@ -728,29 +758,14 @@ export class Cell {
 		pill.matter_base.collisionFilter.group = -1;
 
 
-		// pill.matter_base.collisionFilter.category = 0x0001;
-		// pill.matter_tip.collisionFilter.category = ~1;
-		// pill.matter_tip_light.collisionFilter.category = ~1;
-
-
-
 		let sides = 24
 		pill.sides = sides
 
-
-		// const finger_material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-		// const finger_material = new THREE.MeshStandardMaterial({ color: 0xffff00 });
 
 		const finger_material = this.buildFingerMaterial()
 		pill.finger_material = finger_material
 
 		finger_material.opacity = 0.3;
-
-
-		// finger_material.isVisible = false
-
-		// finger_material.depthWrite = false
-		// finger_material.depthTest = false
 
 
 		const tip_geometry = new THREE.SphereGeometry(1, pill.sides, pill.sides, 0, Math.PI * 2, 0, Math.PI * 2);
@@ -776,7 +791,6 @@ export class Cell {
 		pill.base.renderOrder = 10
 
 
-
 		Matter.Composite.add(this.world, [
 			pill.matter_base,
 			pill.matter_tip,
@@ -789,11 +803,13 @@ export class Cell {
 
 		//build pill light
 		if (pill.pill_light_enabled) {
-			let pill_light = new THREE.PointLight(new THREE.Color(0.5 + Math.random() * .5, 0.5 + Math.random() * .5, 1), 0.6, 4)
+			let pill_light = new THREE.PointLight((new THREE.Color()).setHSL(Math.random(), 0.5, 0.5), 0.3, 4)
 			pill_light.position.set(0, 0, 0)
 			this.root.add(pill_light)
 			pill.light = pill_light
 		}
+
+		pill.frustumCulled = false
 
 		return pill
 	}
@@ -810,6 +826,63 @@ export class Cell {
 	}
 
 
+	buildBlobMaterial() {
+		if (this.blob_material) return this.blob_material
+
+		const loader = new THREE.TextureLoader();
+		const imgTexture = loader.load('moss.png');
+		const thicknessTexture = loader.load('test2.png');
+		imgTexture.wrapS = imgTexture.wrapT = THREE.RepeatWrapping;
+
+		const shader = SubsurfaceScatteringShader;
+		const uniforms = THREE.UniformsUtils.clone(shader.uniforms);
+
+
+		uniforms['map'].value = imgTexture;
+
+		uniforms['diffuse'].value = new THREE.Vector3(0.0, 0.2, .3);
+		uniforms['shininess'].value = 10;
+
+		uniforms['thicknessMap'].value = thicknessTexture;
+		uniforms['thicknessColor'].value = new THREE.Vector3(0.0, 0.3, .6);
+		uniforms['thicknessDistortion'].value = 0.71;
+		uniforms['thicknessAmbient'].value = 1.75;
+		uniforms['thicknessAttenuation'].value = 0.65;
+		uniforms['thicknessPower'].value = 1.8;
+		uniforms['thicknessScale'].value = 11.3;
+
+		const material = new THREE.ShaderMaterial({
+			uniforms: uniforms,
+			vertexShader: shader.vertexShader,
+			fragmentShader: shader.fragmentShader,
+			lights: true
+		});
+		material.extensions.derivatives = true;
+		this.blob_material = material
+
+
+		this.settings.thicknessAmbient = 0.4
+
+
+
+		const ThicknessControls = function () {
+
+			this.distortion = uniforms['thicknessDistortion'].value;
+			this.ambient = uniforms['thicknessAmbient'].value;
+			this.attenuation = uniforms['thicknessAttenuation'].value;
+			this.power = uniforms['thicknessPower'].value;
+			this.scale = uniforms['thicknessScale'].value;
+
+		};
+
+		const thicknessControls = new ThicknessControls();
+
+
+
+
+		return material
+	}
+
 
 	buildFingerMaterial() {
 		if (this.finger_material) return this.finger_material
@@ -825,11 +898,11 @@ export class Cell {
 
 		uniforms['map'].value = imgTexture;
 
-		uniforms['diffuse'].value = new THREE.Vector3(1.0, 1.0, 1.0);
+		uniforms['diffuse'].value = new THREE.Vector3(.7, 0.8, 1.0);
 		uniforms['shininess'].value = 10;
 
 		uniforms['thicknessMap'].value = thicknessTexture;
-		uniforms['thicknessColor'].value = new THREE.Vector3(1.0, 0.3, 0.0);
+		uniforms['thicknessColor'].value = new THREE.Vector3(0.5, 0.5, 0.8);
 		uniforms['thicknessDistortion'].value = 0.71;
 		uniforms['thicknessAmbient'].value = 1.75;
 		uniforms['thicknessAttenuation'].value = 0.65;
@@ -846,7 +919,7 @@ export class Cell {
 		this.finger_material = material
 
 
-		this.settings.thicknessAmbient = 0.3
+		this.settings.thicknessAmbient = 0.4
 
 
 
@@ -864,36 +937,36 @@ export class Cell {
 
 		let gui = this.gui
 
-		gui.add(thicknessControls, 'distortion').min(0.01).max(1).step(0.01).onChange(function () {
+		// gui.add(thicknessControls, 'distortion').min(0.01).max(1).step(0.01).onChange(function () {
 
-			uniforms['thicknessDistortion'].value = thicknessControls.distortion;
-			console.log('distortion');
+		// 	uniforms['thicknessDistortion'].value = thicknessControls.distortion;
+		// 	console.log('distortion');
 
-		});
+		// });
 
-		gui.add(thicknessControls, 'ambient').min(0.01).max(5.0).step(0.05).onChange(function () {
+		// gui.add(thicknessControls, 'ambient').min(0.01).max(5.0).step(0.05).onChange(function () {
 
-			uniforms['thicknessAmbient'].value = thicknessControls.ambient;
+		// 	uniforms['thicknessAmbient'].value = thicknessControls.ambient;
 
-		});
+		// });
 
-		gui.add(thicknessControls, 'attenuation').min(0.01).max(5.0).step(0.05).onChange(function () {
+		// gui.add(thicknessControls, 'attenuation').min(0.01).max(5.0).step(0.05).onChange(function () {
 
-			uniforms['thicknessAttenuation'].value = thicknessControls.attenuation;
+		// 	uniforms['thicknessAttenuation'].value = thicknessControls.attenuation;
 
-		});
+		// });
 
-		gui.add(thicknessControls, 'power').min(0.01).max(16.0).step(0.1).onChange(function () {
+		// gui.add(thicknessControls, 'power').min(0.01).max(16.0).step(0.1).onChange(function () {
 
-			uniforms['thicknessPower'].value = thicknessControls.power;
+		// 	uniforms['thicknessPower'].value = thicknessControls.power;
 
-		});
+		// });
 
-		gui.add(thicknessControls, 'scale').min(0.01).max(50.0).step(0.1).onChange(function () {
+		// gui.add(thicknessControls, 'scale').min(0.01).max(50.0).step(0.1).onChange(function () {
 
-			uniforms['thicknessScale'].value = thicknessControls.scale;
+		// 	uniforms['thicknessScale'].value = thicknessControls.scale;
 
-		});
+		// });
 
 		return material
 	}
@@ -980,7 +1053,7 @@ export class Cell {
 	updatePillFace(pill) {
 		// let { midpoint, tip_position, tip_radius, base_radius } = this.getPillVertices(pill)
 
-
+		// console.log('update pill face')
 
 		pill.face.position.copy(pill.matter_tip.position)
 		pill.face.position.z = pill.tip_radius + 0.25
@@ -1026,33 +1099,10 @@ export class Cell {
 			r + 'pz.png', r + 'nz.png'
 		];
 
-
-		let substrate_material = new THREE.ShaderMaterial({
-			uniforms: {
-				colorMap: {
-					value: [
-						new THREE.Color("#427062"),
-						new THREE.Color("#33594E"),
-						new THREE.Color("#234549"),
-						new THREE.Color("#1E363F"),
-					],
-				},
-				brightnessThresholds: {
-					value: [0.9, 0.45, 0.001],
-				},
-				lightPosition: { value: new THREE.Vector3(15, 15, 15) },
-			},
-
-			vertexShader: tree_vert_shader,
-			fragmentShader: tree_frag_shader,
-
-		})
-
 		let test_mat = new THREE.MeshBasicMaterial({
 			color: 0x00ff00, transparent: true,
 			opacity: 0.1
 		})
-
 
 		const colors = new Uint8Array(6);
 
@@ -1067,65 +1117,90 @@ export class Cell {
 		// basic monochromatic energy preservation
 		const diffuseColor = new THREE.Color().setHSL(0.4, 0.5, 0.5)
 
+		// const toon_material = new THREE.MeshToonMaterial({
+		// 	color: diffuseColor,
+		// 	aoMapIntensity: 1,
+		// 	gradientMap: gradientMap,
+		// });
 
-		const toon_material = new THREE.MeshToonMaterial({
-			color: diffuseColor,
-			aoMapIntensity: 1,
-			gradientMap: gradientMap,
-			transparency: true
-		});
-
-		toon_material.opacity = 0.5
+		// toon_material.opacity = 0.5
 
 
-		const finger_material = this.buildFingerMaterial()
-
-		// const textureCube = new THREE.CubeTextureLoader().load(urls, function () {
-		// 	this.scene.background = textureCube;
-
-		// 	let lightProbe = new THREE.LightProbe();
-		// 	this.scene.add(lightProbe);
-		// 	console.log('add lightprob')
-
-		// 	lightProbe.copy(LightProbeGenerator.fromCubeTexture(textureCube));
-		// }.bind(this));
-
-		// textureCube.mapping = THREE.CubeRefractionMapping;
-
+		const blob_material = this.buildBlobMaterial()
 		let resolution = 42
-		let blob = new MarchingCubes(resolution, finger_material, true, true, 3000);
-		blob.position.set(0, 0, 0);
-		blob.position.set(0, 0, 0)
+		let blob = new MarchingCubes(resolution, blob_material, true, true, 3000);
+		blob.position.set(0, 0, 10);
 		blob.scale.set(20, 20, 20);
 		blob.enableUvs = false;
 		blob.enableColors = false;
 		this.blob = blob;
 		this.root.add(blob);
 
+		blob.frustumCulled = true
+
+
+		this.blob_center_part = Matter.Bodies.circle(0, 0, 1.0, {
+			collisionFilter: {
+				group: -1
+			},
+			friction: 10.0,
+			mass: 4000
+			//add attraction to center
+		})
+		this.blob_center_light = new THREE.PointLight(new THREE.Color(1.0, 0.3, 0.3), 1.0, 20)
+
+		this.root.add(this.blob_center_light)
+
+		this.mouse_constraint = Matter.Constraint.create({
+			pointA: this.world_mouse,
+			bodyB: this.blob_center_part,
+			length: 0,
+			stiffness: 0.0004,
+			damping: 0.01
+		})
+
+
+		this.center_constraint = Matter.Constraint.create({
+			pointA: { x: 0, y: 0 },
+			bodyB: this.blob_center_part,
+			length: 0,
+			stiffness: 0.001,
+			damping: 0.01
+		})
+
+		Matter.World.add(this.blob_world, this.center_constraint)
+		Matter.World.add(this.blob_world, this.mouse_constraint)
+		Matter.World.add(this.blob_world, this.blob_center_part)
+
+
+
 
 
 		for (let i = 0; i < this.settings.blob_parts; i++) {
 			let blob_part = Matter.Bodies.circle(-1 + Math.random() * 2, -1 + Math.random() * 2, 1.0, {
-				// airFriction: 0.1,
-				// slop: 0.1,
-				collisiontFilter: {
+				collisionFilter: {
 					group: -1
 				}
+				//add attraction to center
 			})
 
 			let constraint = Matter.Constraint.create({
 				pointA: { x: 0, y: 0 },
 				bodyB: blob_part,
-				length: 1,
-				stiffness: 0.0003,
-				damping: 0.001
+				length: 0,
+				stiffness: 0.001,
+				damping: 0.002
 			})
 
-			blob_part.constraint = constraint
+
+
+
+			// blob_part.constraint = constraint
 			this.blob_parts.push(blob_part)
 			Matter.World.add(this.blob_world, blob_part)
-			Matter.World.add(this.blob_world, constraint)
+			Matter.Composite.add(this.world, [constraint])
 		}
+
 
 		for (let i = 0; i < this.settings.blob_parts; i++) {
 			for (let j = 0; j < this.settings.blob_parts; j++) {
@@ -1134,44 +1209,68 @@ export class Cell {
 				}
 
 				let constraint = Matter.Constraint.create({
-					bodyA: this.blob_parts[i],
-					bodyB: this.blob_parts[j],
+					bodyA: this.blob_parts[j],
+					bodyB: this.blob_parts[i],
 					length: 4,
 					stiffness: 0.001,
-					damping: 0.001
+					damping: 0.01
 				})
+
+				this.blob_parts[i].constraints = this.blob_parts[i].constraints || []
+				this.blob_parts[i].constraints.push(constraint)
 
 				Matter.World.add(this.blob_world, constraint)
 			}
 		}
 
 
-
-
-
-
+		this.updateBlob()
 	}
 
 	updateBlob() {
 		this.blob.reset()
+
+		// this.mouse_constraint.stiffness = this.world_mouse.length() * 0.0001
+
+		let x = this.blob_center_part.position.x / (20 * 1)
+		let y = this.blob_center_part.position.y / (20 * 1)
+		this.blob.addBall(.5 + x, .5 + y, 0.1, 0.64, 20.0);
+
+
+
+
 		for (let i = 0; i < this.blob_parts.length; i++) {
 			let x = this.blob_parts[i].position.x / (20 * 1)
 			let y = this.blob_parts[i].position.y / (20 * 1)
-			this.blob.addBall(.5 + x, .5 + y, .5, 1.0, 12.0);
+			this.blob.addBall(.5 + x, .5 + y, 0.1, 0.64, 10.0);
 
-			let force = new THREE.Vector2(this.blob_parts[i].position.x, this.blob_parts[i].position.y).normalize().multiplyScalar(0.0000001)
 
 			if (this.mouse_down) {
+				this.blob.scale.x = this.blob.scale.y = this.blob.scale.z = Math.lerp(this.blob.scale.x, 20, 0.05)
+				this.blob.position.z = Math.lerp(this.blob.position.z, 15, 0.1)
 				// console.log('test')
-				Matter.Body.applyForce(this.blob_parts[i], this.blob_parts[i].position, force)
+				// Matter.Body.applyForce(this.blob_parts[i], this.blob_parts[i].position, force)
+				this.blob_parts[i].constraints.forEach((constraint) => { constraint.length = Math.lerp(constraint.length, 6, 0.1) })
+			} else {
+				this.blob.scale.x = this.blob.scale.y = this.blob.scale.z = Math.lerp(this.blob.scale.x, 10, 0.05)
+				this.blob.position.z = Math.lerp(this.blob.position.z, 7.5, 0.1)
+				this.blob_parts[i].constraints.forEach((constraint) => { constraint.length = Math.lerp(constraint.length, 3, 0.1) })
 			}
 		}
+
+		this.blob_center_light.position.x = this.blob_center_part.position.x
+		this.blob_center_light.position.y = this.blob_center_part.position.y
+		this.blob_center_light.position.z = this.blob.position.z
+
 		this.blob.update();
+		this.blob.geometry.computeBoundsTree()
+		// console.log(.boundingBox)
+		//this.blob.geometry.computeBoundsTree();
 	}
 
 	initJointPositions() {
 		let c_r = 10
-		let origin = new THREE.Vector3()
+
 		for (let i = 0; i < this.joints.length; i++) {
 			this.joints[i].position.x = Math.cos(-(Math.PI * 2) / this.joints.length * i) * c_r
 			this.joints[i].position.y = Math.sin(-(Math.PI * 2) / this.joints.length * i) * c_r
@@ -1182,7 +1281,7 @@ export class Cell {
 	}
 
 	projectJointsOnBlob() {
-		this.raycaster.firstHitOnly = true
+
 		let c_r = 20
 		let origin = new THREE.Vector3()
 		// let origin_lerp = new THREE.Vector3()
@@ -1196,25 +1295,30 @@ export class Cell {
 
 		let i = this.step
 		i = i % this.joints.length
-		origin.x = Math.cos(-(Math.PI * 2) / this.joints.length * i) * c_r
-		origin.y = Math.sin(-(Math.PI * 2) / this.joints.length * i) * c_r
-		origin.z = 0
-		normal.copy(origin).lerp(CENTER, 0.1).sub(origin).normalize()
-		this.raycaster.set(origin, normal)
-		// console.log(normal)
-		let raycaster_intersections = this.raycaster.intersectObject(this.blob, false)
 
-		if (raycaster_intersections.length > 0) {
 
-			origin.copy(this.joints[i].position)
+		for (let i = 0; i < this.joints.length; i++) {
+
+
+
+			origin.x = Math.cos(-(Math.PI * 2) / this.joints.length * i + 0.01 * i) * c_r
+			origin.y = Math.sin(-(Math.PI * 2) / this.joints.length * i + 0.01 * i) * c_r
 			origin.z = 0
-			origin.copy(raycaster_intersections[0].point)
-			this.joints[i].position.x = origin.x
-			this.joints[i].position.y = origin.y
+			normal.copy(origin).lerp(CENTER, 0.1).sub(origin).normalize()
+			this.raycaster.set(origin, normal)
+			// console.log(normal)
+			let raycaster_intersections = this.raycaster.intersectObject(this.blob, false)
 
-			// this.joints_buffer[i * 3 + 0] = raycaster_intersections[0].point.x
-			// this.joints_buffer[i * 3 + 1] = raycaster_intersections[0].point.y
-			// this.joints_buffer[i * 3 + 2] = 0
+			if (raycaster_intersections.length > 0) {
+
+				origin.copy(this.joints[i].position)
+				origin.z = 0
+				origin.copy(raycaster_intersections[0].point)
+				this.joints[i].position.x = origin.x
+				this.joints[i].position.y = origin.y
+				// this.joints[i].position.z = origin.z
+
+			}
 		}
 
 	}
@@ -1274,6 +1378,14 @@ export class Cell {
 
 		let target_tip_radius = base_radius
 		let target_height = this.pill_height_buffer[pill._index]
+
+		if (!this.mouse_down) {
+			target_height = 0.1
+		}
+
+
+
+
 		let target_tip_point = midpoint.clone().addScaledVector(normal, target_height)
 
 		let tip_radius = Math.min(target_tip_radius, Math.abs(left_plane.distanceToPoint(target_tip_point)) - padding)
@@ -1304,7 +1416,10 @@ export class Cell {
 		let tip_position = midpoint.clone().addScaledVector(normal, height)
 
 
+		// target_height += pill.tip.position.distanceTo(this.world_mouse) * 0.1
 
+		// target_height += Math.smoothstep(tip_position.distanceTo(this.world_mouse), 0, 0.1) * 0.1
+		// pill.matter_tip && console.log(pill.matter_tip.position)
 
 		return { v0, v1, v2, v3, normal, base_radius, tip_radius, prev_normal, next_normal, left_normal, right_normal, midpoint, max_height_point, max_height, height, tip_position, left_intersection_point, right_intersection_point }
 	}
@@ -1317,7 +1432,7 @@ export class SampleLipidScene {
 	private canvas_el: HTMLCanvasElement;
 	private renderer: THREE.WebGLRenderer;
 	private scene: THREE.Scene;
-	private camera: THREE.PerspectiveCamera;
+	private camera: any;
 	private width: number;
 	private height: number;
 	private stop: boolean = false;
@@ -1377,37 +1492,43 @@ export class SampleLipidScene {
 
 
 		this.camera = new THREE.PerspectiveCamera(75, this.width / this.height, 0.1, 1000);
+		this.camera = new THREE.OrthographicCamera(this.width / -2, this.width / 2, this.height / 2, this.height / -2, 0.1, 1000);
 		this.controls = new OrbitControls(this.camera, this.renderer.domElement);
 
 		window.camera = this.camera
 		// console.log(this.controls)
 
 		//move camera back
-		this.camera.position.z = 10;
+		this.camera.position.z = 20;
+		this.camera.zoom = 60
 		this.camera.lookAt(0, 0, 0)
 		this.scene = new THREE.Scene();
+		this.scene.background = new THREE.Color(0xffffff);
 
-		const grid = new THREE.GridHelper(20, 20);
-		grid.rotation.x = Math.PI / 2;
-		grid.material.opacity = 0.15
-		grid.material.transparent = true
-		grid.material.depthWrite = false
-		grid.material.depthTest = false
-		grid.material.color = new THREE.Color(0x404040)
-		this.scene.add(grid);
+		this.controls.enableRotate = false;
+		// this.scene.background = new THREE.Color().setHSL(0.6, 0.5, 0.5);
+
+		// const grid = new THREE.GridHelper(20, 20);
+		// grid.rotation.x = Math.PI / 2;
+		// grid.material.opacity = 0.15
+		// grid.material.transparent = true
+		// grid.material.depthWrite = false
+		// grid.material.depthTest = false
+		// grid.material.color = new THREE.Color(0x404040)
+		// this.scene.add(grid);
 
 		this.scene = new THREE.Scene();
 
 
 		this.buildLights()
 
-		const axesHelper = new THREE.AxesHelper(5);
-		axesHelper.position.y = 0
-		this.scene.add(axesHelper);
+		// const axesHelper = new THREE.AxesHelper(5);
+		// axesHelper.position.y = 0
+		// this.scene.add(axesHelper);
 
 		// const light = new THREE.AmbientLight(new THREE.Color(1, 1, 1), 0.1); // soft white light
 		// this.scene.add(light);
-		this.controls.enableRotate = settings.camera_rotation
+		// this.controls.enableRotate = settings.camera_rotation
 
 
 		window.addEventListener('resize', this.resize.bind(this));
@@ -1426,13 +1547,13 @@ export class SampleLipidScene {
 	}
 
 	buildLights() {
-		// const pointLight1 = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+		const pointLight1 = new THREE.Mesh(new THREE.SphereGeometry(0, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
 
-		// pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), 1.4, 30));
-		// this.scene.add(pointLight1);
-		// pointLight1.position.x = 0;
-		// pointLight1.position.y = 20;
-		// pointLight1.position.z = 0;
+		pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), .8, 20));
+		this.scene.add(pointLight1);
+		pointLight1.position.x = 0;
+		pointLight1.position.y = 16;
+		pointLight1.position.z = 0;
 
 	}
 
