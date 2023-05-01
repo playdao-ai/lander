@@ -24,6 +24,8 @@ import tree_vert_shader from './shaders/tree.vert';
 import tree_frag_shader from './shaders/tree.frag';
 import plugin from 'tailwindcss';
 
+const V = Matter.Vector;
+
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
@@ -725,14 +727,14 @@ export class Cell {
 			pointA: pill.base_target_point,
 			bodyB: pill.matter_base,
 			length: 0,
-			stiffness: 0.03,
-			damping: 0.05
+			stiffness: 0.02,
+			damping: 0.01
 		});
 
 		pill.matter_constraint_2 = Matter.Constraint.create({
 			bodyA: pill.matter_base,
 			bodyB: pill.matter_tip,
-			stiffness: 0.0001,
+			stiffness: 0.02,
 			damping: 0.05
 		});
 
@@ -745,7 +747,7 @@ export class Cell {
 		});
 
 		pill.matter_constraint_light = Matter.Constraint.create({
-			pointA: pill.matter_tip.position,
+			pointA: pill.matter_base.position,
 			bodyB: pill.matter_tip_light,
 			length: 0,
 			stiffness: 0.1,
@@ -803,7 +805,7 @@ export class Cell {
 
 		//build pill light
 		if (pill.pill_light_enabled) {
-			let pill_light = new THREE.PointLight((new THREE.Color()).setHSL(Math.random(), 0.5, 0.5), 0.3, 4)
+			let pill_light = new THREE.PointLight((new THREE.Color()).setHSL(Math.random(), 0.5, 0.5), 0.3, 2)
 			pill_light.position.set(0, 0, 0)
 			this.root.add(pill_light)
 			pill.light = pill_light
@@ -1151,25 +1153,7 @@ export class Cell {
 
 		this.root.add(this.blob_center_light)
 
-		this.mouse_constraint = Matter.Constraint.create({
-			pointA: this.world_mouse,
-			bodyB: this.blob_center_part,
-			length: 0,
-			stiffness: 0.0004,
-			damping: 0.01
-		})
 
-
-		this.center_constraint = Matter.Constraint.create({
-			pointA: { x: 0, y: 0 },
-			bodyB: this.blob_center_part,
-			length: 0,
-			stiffness: 0.001,
-			damping: 0.01
-		})
-
-		Matter.World.add(this.blob_world, this.center_constraint)
-		Matter.World.add(this.blob_world, this.mouse_constraint)
 		Matter.World.add(this.blob_world, this.blob_center_part)
 
 
@@ -1231,6 +1215,23 @@ export class Cell {
 		this.blob.reset()
 
 		// this.mouse_constraint.stiffness = this.world_mouse.length() * 0.0001
+
+
+
+
+		let center_force = V.mult(V.neg(this.blob_center_part.position), 0.006)
+
+
+		// let mouse_force = V.mult(V.normalise(V.clone(this.world_mouse)), 0.00001)
+
+		let mouse_force = V.mult(V.sub(V.clone(this.world_mouse), this.blob_center_part.position), 0.001)
+
+		// console.log(mouse_force)
+
+		this.blob_center_part.force.x = center_force.x + (mouse_force.x || 0)
+		this.blob_center_part.force.y = center_force.y + (mouse_force.y || 0)
+
+
 
 		let x = this.blob_center_part.position.x / (20 * 1)
 		let y = this.blob_center_part.position.y / (20 * 1)
@@ -1552,8 +1553,8 @@ export class SampleLipidScene {
 		pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), .8, 20));
 		this.scene.add(pointLight1);
 		pointLight1.position.x = 0;
-		pointLight1.position.y = 16;
-		pointLight1.position.z = 0;
+		pointLight1.position.y = 0;
+		pointLight1.position.z = 15;
 
 	}
 
