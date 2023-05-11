@@ -7,6 +7,9 @@ const nextConfig = {
 		config.module.rules.push({
 			test: /\.(frag|vert)$/,
 			type: 'asset/source'
+		}, {
+			test: /\.(txt|md)$/,
+			loader: '@mdx-js/loader'
 		})
 		return config
 	},
