@@ -12,7 +12,6 @@
     "noEmit": true,
     "incremental": true,
     "esModuleInterop": true,
-    "module": "esnext",
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
@@ -21,13 +20,15 @@
       {
         "name": "next"
       }
-    ]
+    ],
+    "module": "esnext"
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "node_modules/three/*"
   ],
   "exclude": [
     "node_modules"

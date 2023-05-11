@@ -1,5 +1,4 @@
 varying vec2 vUv;
-uniform float time;
 uniform float alpha;
 
 #define CIRCLE 6.28318530718
@@ -37,9 +36,10 @@ float speed = 4.5;
 
 void main()
 {
+
     // Normalized pixel coordinates (from 0 to 1)
-   	vec2 center = vUv.xy+vec2(0.5);
-    center = center - vec2(1.0);
+   	vec2 center = (vUv.xy+vec2(0.5))*.5;
+    center = center - vec2(1.0)*.5;
 	float t = elasticOut(alpha);
 	// t = time;
 

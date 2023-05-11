@@ -1,13 +1,14 @@
+// @ts-nocheck
 'use client';
 
 import * as THREE from 'three';
-import { CCDIKSolver } from 'three/addons/animation/CCDIKSolver.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+// import { CCDIKSolver } from 'three/addons/animation/CCDIKSolver.js';
+// import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SubsurfaceScatteringShader } from 'three/addons/shaders/SubsurfaceScatteringShader.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import Stats from 'three/addons/libs/stats.module.js';
 import { DragControls } from 'three/addons/controls/DragControls.js';
-import { LightProbeGenerator } from 'three/addons/lights/LightProbeGenerator.js';
+// import { LightProbeGenerator } from 'three/addons/lights/LightProbeGenerator.js';
 import { MarchingCubes } from 'three/addons/objects/MarchingCubes.js';
 
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
@@ -22,9 +23,8 @@ import mouth_frag_shader from './shaders/mouth.frag';
 import water_frag_shader from './shaders/water.frag';
 import tree_vert_shader from './shaders/tree.vert';
 import tree_frag_shader from './shaders/tree.frag';
+import logo_frag_shader from './shaders/logo.frag'
 import plugin from 'tailwindcss';
-
-const V = Matter.Vector;
 
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
@@ -318,7 +318,7 @@ export class Cell {
 
 		for (let i = 0; i < this.settings.joint_count; i++) {
 			this.joints[i] = Matter.Bodies.circle(this.joints_buffer[i * 3 + 0], this.joints_buffer[i * 3 + 1], 2)
-
+			this.joints[i].size = this.settings.min_size + Math.random() * this.settings.size_var
 			// this.createJointHelperHandle(i)
 		}
 
@@ -429,7 +429,6 @@ export class Cell {
 		// tippoint = tip_position
 
 
-
 		pill.base_radius = Math.lerp(pill.base_radius, base_radius, 0.1)
 		pill.tip_radius = Math.lerp(pill.tip_radius, tip_radius, 0.1)
 
@@ -503,9 +502,6 @@ export class Cell {
 		pill.base.scale.x = pill.base_radius
 		pill.base.scale.y = pill.base_radius
 		pill.base.scale.z = pill.base_radius
-
-
-
 
 	}
 
@@ -722,14 +718,14 @@ export class Cell {
 			pointA: pill.base_target_point,
 			bodyB: pill.matter_base,
 			length: 0,
-			stiffness: 0.02,
-			damping: 0.01
+			stiffness: 0.03,
+			damping: 0.05
 		});
 
 		pill.matter_constraint_2 = Matter.Constraint.create({
 			bodyA: pill.matter_base,
 			bodyB: pill.matter_tip,
-			stiffness: 0.02,
+			stiffness: 0.0001,
 			damping: 0.05
 		});
 
@@ -742,7 +738,7 @@ export class Cell {
 		});
 
 		pill.matter_constraint_light = Matter.Constraint.create({
-			pointA: pill.matter_base.position,
+			pointA: pill.matter_tip.position,
 			bodyB: pill.matter_tip_light,
 			length: 0,
 			stiffness: 0.1,
@@ -755,7 +751,7 @@ export class Cell {
 		pill.matter_base.collisionFilter.group = -1;
 
 
-		let sides = 32
+		let sides = this.settings.sides
 		pill.sides = sides
 
 
@@ -800,7 +796,7 @@ export class Cell {
 
 		//build pill light
 		if (pill.pill_light_enabled) {
-			let pill_light = new THREE.PointLight((new THREE.Color()).setHSL(Math.random(), 0.5, 0.5), 0.3, 2)
+			let pill_light = new THREE.PointLight((new THREE.Color()).setHSL(Math.random(), 0.5, 0.5), 0.3, 4)
 			pill_light.position.set(0, 0, 0)
 			this.root.add(pill_light)
 			pill.light = pill_light
@@ -1211,7 +1207,6 @@ export class Cell {
 			}
 		}
 
-
 		this.updateBlob()
 	}
 
@@ -1257,10 +1252,11 @@ export class Cell {
 		let s_a = -this.settings.start_angle
 
 		for (let i = 0; i < this.joints.length; i++) {
-			s_a -= 0.2 + (i % 2 == 0 ? 0.1 : 0.0)
+			s_a -= this.joints[i].size
+			// console.log(this.joints[i].size)
 
-			this.joints[i].position.x = Math.cos(this.settings.start_angle + -(this.settings.angle_len) / this.joints.length * i) * c_r
-			this.joints[i].position.y = Math.sin(this.settings.start_angle + -(this.settings.angle_len) / this.joints.length * i) * c_r
+			this.joints[i].position.x = Math.cos(s_a) * c_r
+			this.joints[i].position.y = Math.sin(s_a) * c_r
 
 			this.joints[i].position.x += this.blob.position.x
 			this.joints[i].position.y += this.blob.position.y
@@ -1282,16 +1278,13 @@ export class Cell {
 		this.step = this.step || 0
 		this.step++
 
-		// console.log(Math.floor(step) % this.joints.length)
-
 		let i = this.step
 		i = i % this.joints.length
 
 		let s_a = -this.settings.start_angle
 
 		for (let i = 0; i < this.joints.length; i++) {
-			s_a -= 0.2 + (i % 2 == 0 ? 0.1 : 0.0)
-
+			s_a -= this.joints[i].size
 
 			origin.x = Math.cos(s_a) * c_r
 			origin.y = Math.sin(s_a) * c_r
@@ -1442,9 +1435,11 @@ export class SampleLipidScene {
 			joint_spacing: 0.1,
 			thicknessAmbient: 0.1,
 			start_angle: 1.3,
-			angle_len: 2.5,
+			sides: 24,
 			camera_rotation: false,
 			joint_count: 12,
+			min_size: 0.1,
+			size_var: 0.1,
 			blob_parts: 3,
 			rotation_direction: 1,
 			position: new THREE.Vector3(0, 0, 0),
@@ -1456,7 +1451,9 @@ export class SampleLipidScene {
 			joint_spacing: 0.1,
 			thicknessAmbient: 0.1,
 			start_angle: -1.2,
-			angle_len: 2.5,
+			min_size: 0.1,
+			sides: 24,
+			size_var: 0.2,
 			camera_rotation: false,
 			joint_count: 12,
 			blob_parts: 3,
@@ -1472,8 +1469,11 @@ export class SampleLipidScene {
 			thicknessAmbient: 0.1,
 			start_angle: -Math.PI * 1.1,
 			angle_len: 3,
+			sides: 24,
 			camera_rotation: false,
 			joint_count: 15,
+			min_size: 0.1,
+			size_var: 0.3,
 			blob_parts: 3,
 			rotation_direction: 0,
 			position: new THREE.Vector3(0, 0, 0),
@@ -1522,7 +1522,7 @@ export class SampleLipidScene {
 
 		//move camera back
 		this.camera.position.z = 30;
-		this.camera.zoom = 60
+		this.camera.zoom = 30
 		this.camera.lookAt(0, 0, 0)
 		this.scene = new THREE.Scene();
 		this.scene.background = new THREE.Color(0xffffff);
@@ -1573,6 +1573,13 @@ export class SampleLipidScene {
 			this.scene.add(this.cell.root)
 		}
 
+		this.logo_alpha_uniform = {
+			value: 0
+		}
+
+		if (top) {
+			this.buildCenterLogo()
+		}
 
 		this.animate(0)
 		this.resize()
@@ -1586,6 +1593,27 @@ export class SampleLipidScene {
 		// pointLight1.position.x = 0;
 		// pointLight1.position.y = 0;
 		// pointLight1.position.z = 0;
+
+	}
+
+	buildCenterLogo() {
+		let logo_geom = new THREE.PlaneGeometry(1, 1, 1, 1)
+		let logo_material = new THREE.ShaderMaterial({
+			uniforms: {
+				alpha: this.logo_alpha_uniform,
+			},
+			vertexShader: default_vertex_shader,
+			fragmentShader: logo_frag_shader
+		})
+
+		let logo_shape = new THREE.Mesh(logo_geom, logo_material)
+		logo_shape.position.z = 0.1
+		logo_shape.position.y = 4
+		logo_shape.scale.multiplyScalar(8)
+		this.scene.add(logo_shape)
+	}
+
+	buildButton() {
 
 	}
 
@@ -1604,7 +1632,8 @@ export class SampleLipidScene {
 		this.camera.bottom = this.height / -2
 		this.camera.updateProjectionMatrix();
 		this.renderer.setSize(this.width, this.height);
-
+		this.camera.zoom = Math.pow(this.width, .5) * 1.2
+		console.log(this.camera.zoom)
 	}
 
 	animate(t) {
@@ -1615,16 +1644,19 @@ export class SampleLipidScene {
 		this.renderer.render(this.scene, this.camera);
 		this.camera.updateProjectionMatrix()
 
-
+		this.logo_alpha_uniform.value = Math.lerp(this.logo_alpha_uniform.value, 1, 0.01)
 
 		if (!this.top && window.scrollY > 300) {
 			this.cell.settings.position.copy(screenToWorld(this.canvas_el, this.camera, new THREE.Vector3(this.width / 2, this.height + 200, 1), new THREE.Vector3(0, 0, 0)))
 			this.cell.animate(t);
 		} else if (window.scrollY < 300 && this.top) {
-			this.cell.settings.position.copy(screenToWorld(this.canvas_el, this.camera, new THREE.Vector3(this.width + 150, this.height / 3, 1), new THREE.Vector3(0, 0, 0)))
+			this.cell.settings.position.copy(screenToWorld(this.canvas_el, this.camera, new THREE.Vector3(this.width, -100, 1), new THREE.Vector3(0, 0, 0)))
 			this.cell2.settings.position.copy(screenToWorld(this.canvas_el, this.camera, new THREE.Vector3(-150, this.height / 2, 1), new THREE.Vector3(0, 0, 0)))
 			this.cell.animate(t);
 			this.cell2.animate(t);
+		} else {
+			requestAnimationFrame(this.animate.bind(this));
+			return
 		}
 
 		requestAnimationFrame(this.animate.bind(this));
@@ -1635,11 +1667,9 @@ export class SampleLipidScene {
 	}
 
 	destroy() {
-		console.log('destroying scene')
-		// this.canvas_el.remove();
+		console.log('destroying scene');
 		this.cell.destroy();
 		this.cell2?.destroy();
 		this.stop = true;
-		// this.gui.destroy();
 	}
 }
