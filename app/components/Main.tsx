@@ -170,10 +170,10 @@ function createScene(canvas_el) {
 
 let t1 = undefined
 let t2 = undefined
-function useScene(ref, de_ref) {
+function useScene(ref, { top = true }) {
 	useEffect(() => {
 		if (ref.current) {
-			var debug_scene = new SampleLipidScene(ref.current, de_ref.current);
+			var debug_scene = new SampleLipidScene(ref.current, { top: top });
 
 		}
 		return () => {
@@ -187,12 +187,18 @@ function useScene(ref, de_ref) {
 
 export default function Main() {
 	const ref = useRef(null);
-	const de_ref = useRef(null);
-	const scene = useScene(ref, de_ref);
+	const ref2 = useRef(null);
+	const scene = useScene(ref, { top: true });
+	const scene2 = useScene(ref2, { top: false });
 
-
-	return <div className='w-full h-[100vh]'>
-		<canvas className='w-full h-full' ref={ref} />
-		<canvas className='w-full h-full fixed' ref={de_ref} />
+	return <div className='w-full h-[200vh] relative'>
+		<div className='w-full h-[900px]'>
+			<canvas className='w-full h-full' ref={ref} />
+		</div>
+		<div>test</div>
+		<div className='w-full h-[400px] absolute bottom-0'>
+			<canvas className='w-full h-full' ref={ref2} />
+		</div>
+		{/* <canvas className='w-full h-[500px] absolute bottom-0' ref={ref2} /> */}
 	</div>
 }

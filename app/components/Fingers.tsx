@@ -34,7 +34,6 @@ THREE.Vector2.prototype.angleTo = function (v2) {
 	return angle;
 }
 
-const CENTER = new THREE.Vector3(0, 0, 0)
 
 Math.lerp = function (start, end, t) {
 	return (1 - t) * start + t * end;
@@ -61,7 +60,14 @@ Math.step = function (x, y) {
 // when the width of the lipid reaches a certain threshold the lipid will split into 2 lipids after a certain amount of time or it will emit a token and shrink back in width to reach equillibrium
 // lipids will also merge into 1 lipid if the width is too small
 
-
+function screenToWorld(canvas, camera, screen_vec: THREE.Vector2, world_vec: THREE.Vector3 = new THREE.Vector3()) {
+	world_vec.copy(screen_vec);
+	world_vec.x = (world_vec.x / canvas.clientWidth) * 2 - 1;
+	world_vec.y = -(world_vec.y / canvas.clientHeight) * 2 + 1;
+	world_vec.z = 0.5;
+	world_vec.unproject(camera);
+	return world_vec;
+}
 
 
 let i_ray = new THREE.Ray()
@@ -159,7 +165,8 @@ function findScaledNormal(point_a, point_b) {
 
 export class Cell {
 	public root: THREE.Object3D;
-	private settings: any;
+	public settings: any;
+	public canvas_el: HTMLCanvasElement;
 	private gui: GUI;
 	private camera: THREE.Camera;
 	private renderer: THREE.Renderer;
@@ -189,10 +196,10 @@ export class Cell {
 	private screen_mouse: THREE.Vector2 = new THREE.Vector2();
 	private world_mouse: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
 
-
-	constructor(settings, gui, camera, renderer, scene, cell_uniforms) {
+	constructor(settings, gui, camera, renderer, scene, cell_uniforms, canvas_el) {
 		this.root = new THREE.Object3D()
 		this.scene = scene
+		this.canvas_el = canvas_el
 		this.cell_uniforms = cell_uniforms
 		this.gui = gui
 		this.settings = settings
@@ -209,10 +216,8 @@ export class Cell {
 		let blob_engine = Matter.Engine.create()
 		this.blob_world = blob_engine.world
 
-
 		this.world = world
 		this.blob_engine = blob_engine
-
 
 		this.engine = engine
 		this.engine.gravity.scale = 0
@@ -220,27 +225,16 @@ export class Cell {
 		this.engine = engine
 		this.blob_world.gravity.scale = 0
 
-
 		this.buildJoints()
 		this.buildPills()
 		this.buildBlob()
-		// this.buildFrames()
+
 		this.buildDragControls()
 		this.initJointPositions()
 	}
 
-	screenToWorld(screen_vec: THREE.Vector2, world_vec: THREE.Vector3 = new THREE.Vector3()) {
-		world_vec.copy(screen_vec)
-		world_vec.x = (world_vec.x / window.innerWidth) * 2 - 1;
-		world_vec.y = -(world_vec.y / window.innerHeight) * 2 + 1;
-		world_vec.z = 0.5
-		world_vec.unproject(this.camera)
-
-		return world_vec
-	}
 
 	buildDragControls() {
-
 
 		window.addEventListener('mousedown', () => {
 			this.mouse_down = true
@@ -252,11 +246,12 @@ export class Cell {
 
 		window.addEventListener('mousemove', (e) => {
 			this.screen_mouse.set(e.screenX, e.screenY)
-			this.screenToWorld(this.screen_mouse, this.world_mouse)
+			screenToWorld(this.canvas_el, this.camera, this.screen_mouse, this.world_mouse)
 		})
 
 
 		let joint_drag_controls = new DragControls(this.joint_handles, this.camera, this.renderer.domElement);
+
 		joint_drag_controls.addEventListener('drag', function (event) {
 			event.object.position.z = 0
 			this.drag_current.x = event.object.position.x
@@ -758,7 +753,7 @@ export class Cell {
 		pill.matter_base.collisionFilter.group = -1;
 
 
-		let sides = 24
+		let sides = 32
 		pill.sides = sides
 
 
@@ -1009,15 +1004,6 @@ export class Cell {
 		})
 
 
-
-
-
-		// eye_material.depthWrite = false
-		// eye_material.depthTest = false
-
-		// mouth_material.depthWrite = false
-		// mouth_material.depthTest = false
-
 		let left_eye_geom = new THREE.PlaneGeometry(1, 1, 1, 1)
 		let right_eye_geom = new THREE.PlaneGeometry(1, 1, 1, 1)
 		let mouth_geom = new THREE.PlaneGeometry(1, 1, 1, 1)
@@ -1127,9 +1113,10 @@ export class Cell {
 
 
 		const blob_material = this.buildBlobMaterial()
-		let resolution = 42
-		let blob = new MarchingCubes(resolution, blob_material, true, true, 3000);
+		let resolution = 32
+		let blob = new MarchingCubes(resolution, blob_material, true, true, 1000);
 		blob.position.set(0, 0, 10);
+		blob.position.add(this.settings.position)
 		blob.scale.set(20, 20, 20);
 		blob.enableUvs = false;
 		blob.enableColors = false;
@@ -1151,26 +1138,25 @@ export class Cell {
 
 		this.root.add(this.blob_center_light)
 
-		this.mouse_constraint = Matter.Constraint.create({
-			pointA: this.world_mouse,
-			bodyB: this.blob_center_part,
-			length: 0,
-			stiffness: 0.0004,
-			damping: 0.01
-		})
+		// this.mouse_constraint = Matter.Constraint.create({
+		// 	pointA: this.world_mouse,
+		// 	bodyB: this.blob_center_part,
+		// 	length: 0,
+		// 	stiffness: 0.0004,
+		// 	damping: 0.01
+		// })
 
+		// this.center_constraint = Matter.Constraint.create({
+		// 	pointA: { x: 0, y: 0 },
+		// 	bodyB: this.blob_center_part,
+		// 	length: 0,
+		// 	stiffness: 0.001,
+		// 	damping: 0.01
+		// })
 
-		this.center_constraint = Matter.Constraint.create({
-			pointA: { x: 0, y: 0 },
-			bodyB: this.blob_center_part,
-			length: 0,
-			stiffness: 0.001,
-			damping: 0.01
-		})
-
-		Matter.World.add(this.blob_world, this.center_constraint)
-		Matter.World.add(this.blob_world, this.mouse_constraint)
-		Matter.World.add(this.blob_world, this.blob_center_part)
+		// Matter.World.add(this.blob_world, this.center_constraint)
+		// Matter.World.add(this.blob_world, this.mouse_constraint)
+		// Matter.World.add(this.blob_world, this.blob_center_part)
 
 
 
@@ -1227,16 +1213,17 @@ export class Cell {
 		this.updateBlob()
 	}
 
+
 	updateBlob() {
 		this.blob.reset()
 
-		// this.mouse_constraint.stiffness = this.world_mouse.length() * 0.0001
+		this.blob_center_part.position.x = this.settings.position.x
+		this.blob_center_part.position.y = this.settings.position.y
 
+		// this.mouse_constraint.stiffness = this.world_mouse.length() * 0.0001
 		let x = this.blob_center_part.position.x / (20 * 1)
 		let y = this.blob_center_part.position.y / (20 * 1)
 		this.blob.addBall(.5 + x, .5 + y, 0.1, 0.64, 20.0);
-
-
 
 
 		for (let i = 0; i < this.blob_parts.length; i++) {
@@ -1244,36 +1231,38 @@ export class Cell {
 			let y = this.blob_parts[i].position.y / (20 * 1)
 			this.blob.addBall(.5 + x, .5 + y, 0.1, 0.64, 10.0);
 
-
-			if (this.mouse_down) {
-				this.blob.scale.x = this.blob.scale.y = this.blob.scale.z = Math.lerp(this.blob.scale.x, 20, 0.05)
-				this.blob.position.z = Math.lerp(this.blob.position.z, 15, 0.1)
-				// console.log('test')
-				// Matter.Body.applyForce(this.blob_parts[i], this.blob_parts[i].position, force)
-				this.blob_parts[i].constraints.forEach((constraint) => { constraint.length = Math.lerp(constraint.length, 6, 0.1) })
-			} else {
-				this.blob.scale.x = this.blob.scale.y = this.blob.scale.z = Math.lerp(this.blob.scale.x, 10, 0.05)
-				this.blob.position.z = Math.lerp(this.blob.position.z, 7.5, 0.1)
-				this.blob_parts[i].constraints.forEach((constraint) => { constraint.length = Math.lerp(constraint.length, 3, 0.1) })
-			}
+			this.blob.scale.x = this.blob.scale.y = this.blob.scale.z = Math.lerp(this.blob.scale.x, 20, 0.05)
+			this.blob.position.z = Math.lerp(this.blob.position.z, 15, 0.1)
+			this.blob_parts[i].constraints.forEach((constraint) => { constraint.length = Math.lerp(constraint.length, 6, 0.1) })
 		}
 
-		this.blob_center_light.position.x = this.blob_center_part.position.x
-		this.blob_center_light.position.y = this.blob_center_part.position.y
+		this.blob_center_light.position.x = this.blob.position.x
+		this.blob_center_light.position.y = this.blob.position.y
 		this.blob_center_light.position.z = this.blob.position.z
 
 		this.blob.update();
-		this.blob.geometry.computeBoundsTree()
+		this.blob.geometry.computeBoundsTree();
+
+		this.blob.rotation.z += 0.002 * this.settings.rotation_direction
+		this.blob.position.x = this.settings.position.x
+		this.blob.position.y = this.settings.position.y
 		// console.log(.boundingBox)
 		//this.blob.geometry.computeBoundsTree();
 	}
 
 	initJointPositions() {
 		let c_r = 10
+		let s_a = -this.settings.start_angle
 
 		for (let i = 0; i < this.joints.length; i++) {
-			this.joints[i].position.x = Math.cos(-(Math.PI * 2) / this.joints.length * i) * c_r
-			this.joints[i].position.y = Math.sin(-(Math.PI * 2) / this.joints.length * i) * c_r
+			s_a -= 0.2 + (i % 2 == 0 ? 0.1 : 0.0)
+
+			this.joints[i].position.x = Math.cos(this.settings.start_angle + -(this.settings.angle_len) / this.joints.length * i) * c_r
+			this.joints[i].position.y = Math.sin(this.settings.start_angle + -(this.settings.angle_len) / this.joints.length * i) * c_r
+
+			this.joints[i].position.x += this.blob.position.x
+			this.joints[i].position.y += this.blob.position.y
+
 			this.joints_buffer[i * 3 + 0] = this.joints[i].position.x
 			this.joints_buffer[i * 3 + 1] = this.joints[i].position.y
 			this.joints_buffer[i * 3 + 2] = 0
@@ -1296,17 +1285,22 @@ export class Cell {
 		let i = this.step
 		i = i % this.joints.length
 
+		let s_a = -this.settings.start_angle
 
 		for (let i = 0; i < this.joints.length; i++) {
+			s_a -= 0.2 + (i % 2 == 0 ? 0.1 : 0.0)
 
 
-
-			origin.x = Math.cos(-(Math.PI * 2) / this.joints.length * i + 0.01 * i) * c_r
-			origin.y = Math.sin(-(Math.PI * 2) / this.joints.length * i + 0.01 * i) * c_r
+			origin.x = Math.cos(s_a) * c_r
+			origin.y = Math.sin(s_a) * c_r
 			origin.z = 0
-			normal.copy(origin).lerp(CENTER, 0.1).sub(origin).normalize()
+
+			origin.x += this.blob.position.x
+			origin.y += this.blob.position.y
+
+			normal.copy(origin).lerp({ x: this.blob.position.x, y: this.blob.position.y, z: 0 }, 0.1).sub(origin).normalize()
 			this.raycaster.set(origin, normal)
-			// console.log(normal)
+
 			let raycaster_intersections = this.raycaster.intersectObject(this.blob, false)
 
 			if (raycaster_intersections.length > 0) {
@@ -1316,13 +1310,10 @@ export class Cell {
 				origin.copy(raycaster_intersections[0].point)
 				this.joints[i].position.x = origin.x
 				this.joints[i].position.y = origin.y
-				// this.joints[i].position.z = origin.z
 
 			}
 		}
-
 	}
-
 
 
 	getPillVertices(pill) {
@@ -1378,12 +1369,6 @@ export class Cell {
 
 		let target_tip_radius = base_radius
 		let target_height = this.pill_height_buffer[pill._index]
-
-		if (!this.mouse_down) {
-			target_height = 0.1
-		}
-
-
 
 
 		let target_tip_point = midpoint.clone().addScaledVector(normal, target_height)
@@ -1445,7 +1430,7 @@ export class SampleLipidScene {
 	private world: Matter.World;
 	private uniforms: any;
 
-	constructor(canvas_el) {
+	constructor(canvas_el, { top: top }) {
 		console.log('constructing scene')
 		this.canvas_el = canvas_el;
 		this.width = canvas_el.clientWidth;
@@ -1454,30 +1439,65 @@ export class SampleLipidScene {
 			joint_stiffness: 0.1,
 			joint_spacing: 0.1,
 			thicknessAmbient: 0.1,
+			start_angle: 1.3,
+			angle_len: 2.5,
 			camera_rotation: false,
-			joint_count: 24,
+			joint_count: 12,
 			blob_parts: 3,
+			rotation_direction: 1,
+			position: new THREE.Vector3(0, 0, 0),
 		}
 		this.settings = settings
-		let gui = new GUI();
-		this.gui = gui
 
-		gui.add(settings, 'camera_rotation')
-			.name('camera rotation')
-			.onChange(value => {
-				this.controls.enableRotate = value;
-				if (value == false) {
-					console.log('test')
-					this.controls.reset();
-					this.camera.position.set(0, 0, 10)
-				}
-			});
+		let settings2 = {
+			joint_stiffness: 0.1,
+			joint_spacing: 0.1,
+			thicknessAmbient: 0.1,
+			start_angle: -1.2,
+			angle_len: 2.5,
+			camera_rotation: false,
+			joint_count: 12,
+			blob_parts: 3,
+			rotation_direction: -1,
+			position: new THREE.Vector3(0, 0, 0),
+		}
 
-		gui.add(settings, 'joint_count')
-			.name('joint count')
-			.onChange(value => {
+		this.settings2 = settings2
 
-			});
+		let settings3 = {
+			joint_stiffness: 0.1,
+			joint_spacing: 0.1,
+			thicknessAmbient: 0.1,
+			start_angle: -Math.PI * 1.1,
+			angle_len: 3,
+			camera_rotation: false,
+			joint_count: 15,
+			blob_parts: 3,
+			rotation_direction: 0,
+			position: new THREE.Vector3(0, 0, 0),
+		}
+
+		this.settings3 = settings3
+
+		// let gui = new GUI();
+		// this.gui = gui
+
+		// gui.add(settings, 'camera_rotation')
+		// 	.name('camera rotation')
+		// 	.onChange(value => {
+		// 		this.controls.enableRotate = value;
+		// 		if (value == false) {
+		// 			console.log('test')
+		// 			this.controls.reset();
+		// 			this.camera.position.set(0, 0, 10)
+		// 		}
+		// 	});
+
+		// gui.add(settings, 'joint_count')
+		// 	.name('joint count')
+		// 	.onChange(value => {
+
+		// 	});
 
 
 		this.renderer = new THREE.WebGLRenderer({
@@ -1493,19 +1513,19 @@ export class SampleLipidScene {
 
 		this.camera = new THREE.PerspectiveCamera(75, this.width / this.height, 0.1, 1000);
 		this.camera = new THREE.OrthographicCamera(this.width / -2, this.width / 2, this.height / 2, this.height / -2, 0.1, 1000);
-		this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+		// this.controls = new OrbitControls(this.camera, this.renderer.domElement);
 
 		window.camera = this.camera
 		// console.log(this.controls)
 
 		//move camera back
-		this.camera.position.z = 20;
+		this.camera.position.z = 30;
 		this.camera.zoom = 60
 		this.camera.lookAt(0, 0, 0)
 		this.scene = new THREE.Scene();
 		this.scene.background = new THREE.Color(0xffffff);
 
-		this.controls.enableRotate = false;
+		// this.controls.enableRotate = false;
 		// this.scene.background = new THREE.Color().setHSL(0.6, 0.5, 0.5);
 
 		// const grid = new THREE.GridHelper(20, 20);
@@ -1519,6 +1539,7 @@ export class SampleLipidScene {
 
 		this.scene = new THREE.Scene();
 
+		this.top = top
 
 		this.buildLights()
 
@@ -1539,8 +1560,17 @@ export class SampleLipidScene {
 		}
 
 
-		this.cell = new Cell(this.settings, this.gui, this.camera, this.renderer, this.scene, this.uniforms)
-		this.scene.add(this.cell.root)
+		if (top) {
+			this.cell = new Cell(this.settings, this.gui, this.camera, this.renderer, this.scene, this.uniforms, this.canvas_el)
+			this.scene.add(this.cell.root)
+
+			this.cell2 = new Cell(this.settings2, this.gui, this.camera, this.renderer, this.scene, this.uniforms, this.canvas_el)
+			this.scene.add(this.cell2.root)
+		} else {
+			this.cell = new Cell(this.settings3, this.gui, this.camera, this.renderer, this.scene, this.uniforms, this.canvas_el)
+			this.scene.add(this.cell.root)
+		}
+
 
 		this.animate(0)
 		this.resize()
@@ -1549,20 +1579,30 @@ export class SampleLipidScene {
 	buildLights() {
 		const pointLight1 = new THREE.Mesh(new THREE.SphereGeometry(0, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
 
-		pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), .8, 20));
-		this.scene.add(pointLight1);
-		pointLight1.position.x = 0;
-		pointLight1.position.y = 16;
-		pointLight1.position.z = 0;
+		// pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), .2, 20));
+		// this.scene.add(pointLight1);
+		// pointLight1.position.x = 0;
+		// pointLight1.position.y = 0;
+		// pointLight1.position.z = 0;
 
 	}
 
 
 
 	resize() {
+		let w = this.canvas_el.parentElement.clientWidth
+		let h = this.canvas_el.parentElement.clientHeight
+		this.canvas_el.style.width = w + 'px';
+		this.canvas_el.style.height = h + 'px';
 		this.width = this.canvas_el.clientWidth;
 		this.height = this.canvas_el.clientHeight;
+		this.camera.left = this.width / -2
+		this.camera.right = this.width / 2
+		this.camera.top = this.height / 2
+		this.camera.bottom = this.height / -2
+		this.camera.updateProjectionMatrix();
 		this.renderer.setSize(this.width, this.height);
+
 	}
 
 	animate(t) {
@@ -1570,12 +1610,20 @@ export class SampleLipidScene {
 			return;
 		}
 
-
-
-		this.controls.update();
 		this.renderer.render(this.scene, this.camera);
 		this.camera.updateProjectionMatrix()
-		this.cell.animate(t);
+
+
+
+		if (!this.top && window.scrollY > 300) {
+			this.cell.settings.position.copy(screenToWorld(this.canvas_el, this.camera, new THREE.Vector3(this.width / 2, this.height + 200, 1), new THREE.Vector3(0, 0, 0)))
+			this.cell.animate(t);
+		} else if (window.scrollY < 300 && this.top) {
+			this.cell.settings.position.copy(screenToWorld(this.canvas_el, this.camera, new THREE.Vector3(this.width + 150, this.height / 3, 1), new THREE.Vector3(0, 0, 0)))
+			this.cell2.settings.position.copy(screenToWorld(this.canvas_el, this.camera, new THREE.Vector3(-150, this.height / 2, 1), new THREE.Vector3(0, 0, 0)))
+			this.cell.animate(t);
+			this.cell2.animate(t);
+		}
 
 		requestAnimationFrame(this.animate.bind(this));
 
@@ -1588,7 +1636,8 @@ export class SampleLipidScene {
 		console.log('destroying scene')
 		// this.canvas_el.remove();
 		this.cell.destroy();
+		this.cell2?.destroy();
 		this.stop = true;
-		this.gui.destroy();
+		// this.gui.destroy();
 	}
 }
