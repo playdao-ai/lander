@@ -24,6 +24,8 @@ import tree_vert_shader from './shaders/tree.vert';
 import tree_frag_shader from './shaders/tree.frag';
 import plugin from 'tailwindcss';
 
+const V = Matter.Vector;
+
 
 THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
 THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
@@ -720,14 +722,14 @@ export class Cell {
 			pointA: pill.base_target_point,
 			bodyB: pill.matter_base,
 			length: 0,
-			stiffness: 0.03,
-			damping: 0.05
+			stiffness: 0.02,
+			damping: 0.01
 		});
 
 		pill.matter_constraint_2 = Matter.Constraint.create({
 			bodyA: pill.matter_base,
 			bodyB: pill.matter_tip,
-			stiffness: 0.0001,
+			stiffness: 0.02,
 			damping: 0.05
 		});
 
@@ -740,7 +742,7 @@ export class Cell {
 		});
 
 		pill.matter_constraint_light = Matter.Constraint.create({
-			pointA: pill.matter_tip.position,
+			pointA: pill.matter_base.position,
 			bodyB: pill.matter_tip_light,
 			length: 0,
 			stiffness: 0.1,
@@ -798,7 +800,7 @@ export class Cell {
 
 		//build pill light
 		if (pill.pill_light_enabled) {
-			let pill_light = new THREE.PointLight((new THREE.Color()).setHSL(Math.random(), 0.5, 0.5), 0.3, 4)
+			let pill_light = new THREE.PointLight((new THREE.Color()).setHSL(Math.random(), 0.5, 0.5), 0.3, 2)
 			pill_light.position.set(0, 0, 0)
 			this.root.add(pill_light)
 			pill.light = pill_light
