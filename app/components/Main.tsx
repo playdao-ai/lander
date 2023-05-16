@@ -59,23 +59,29 @@ export default function Main() {
 		<div className='w-full h-[900px]'>
 			<canvas className='w-full h-full' ref={ref} />
 		</div>
-		<div className='w-full flex flex-down justify-center px-4 z-20 relative min-h-screen top-[-500px] text-white'>
-			<div className='w-[600px] max-w-full'>
-				<div className='flex w-full items-center content-center justify-center'>
-					<img src='./logo-name.svg ' className='w-[300px]'></img>
-				</div>
-				<div className='content text-yellow-100'><Readme /></div>
-
+		<div className='w-full flex flex-col items-center px-4 z-20 relative min-h-screen top-[-500px] text-white'>
+			<div className='w-[600px] max-w-full flex flex-col'>
+				<img src='./logo-name.svg ' className='w-full'></img>
+				<h1>unlocking global consiousness</h1>
 			</div>
+			<div className='w-[600px] max-w-full'>
+				<div className='content text-white-200'><Readme /></div>
+			</div>
+
+
 
 		</div>
 
 		<div className='w-full h-[400px] relative top-[-300px]'>
-			<div className='flex flex-down w-full items-center content-center justify-center'>
-				<a href='https://www.notion.so/another-draft-a0b2e273c0e0487891d3ff178cb0ba29?pvs=4'><div className='bg-yellow-100 cursor-pointer rounded-full px-8 p-3 text-black w-auto font-uppercase'>read full whitepaper</div></a>
+			<div className='flex flex-down w-full items-center content-center justify-center z-10 relative'>
+				<a href='https://www.notion.so/another-draft-a0b2e273c0e0487891d3ff178cb0ba29?pvs=4'>
+					<div className='bg-white text-2xl font-thin outline outline-4 outline-fuchsia-800 hover:outline-fuchsia-500 cursor-pointer rounded-full px-12 p-6 text-black w-auto font-uppercase'>
+						read full whitepaper
+					</div>
+				</a>
 			</div>
 			<canvas className='w-full h-full' ref={ref2} />
 		</div>
 		{/* <canvas className='w-full h-[500px] absolute bottom-0' ref={ref2} /> */}
-	</div>
+	</div >
 }

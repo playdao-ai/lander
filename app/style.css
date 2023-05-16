@@ -13,9 +13,14 @@ body {
 	padding: 0;
 	margin: 0;
 	width: 100vw;
+	text-rendering: geometricprecision;
 	font-size: 1em;
 	height: auto;
 	font-family: 'Figtree', sans-serif;
+}
+
+strong {
+	font-weight: 800;
 }
 
 * {
@@ -25,19 +30,22 @@ body {
 p {
 	margin-top: 1em;
 	font-size: 1.4em;
-	font-weight: 200;
+	font-weight: 100;
 }
 
 h1 {
-	font-size: 2em;
+	font-size: 2.4em;
 	font-weight: 700;
-	margin-top: 1em;
-	margin-bottom: 1em;
-	text-align: center;
+	margin-top: .2em;
+	margin-bottom: 2em;
+	font-weight: 100;
+	color: #00e65b;
+	text-transform: capitalize;
+	text-align: start;
 }
 
 .content {
 	background: black;
-	padding: 2em;
-	margin-top: 1.6em;
+	padding: 0em;
+	margin-top: 3em;
 }

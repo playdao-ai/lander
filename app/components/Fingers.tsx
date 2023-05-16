@@ -1393,6 +1393,7 @@ export class Cell {
 		max_height_point.copy(midpoint).addScaledVector(normal, max_height)
 
 		let height = Math.min(max_height, target_height)
+		height = height * Math.pow(tip_radius, 0.7)
 		let tip_position = midpoint.clone().addScaledVector(normal, height)
 
 
