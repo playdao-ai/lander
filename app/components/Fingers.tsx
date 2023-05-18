@@ -1656,8 +1656,10 @@ export class SampleLipidScene {
 		this.camera.top = this.height / 2
 		this.camera.bottom = this.height / -2
 		this.camera.updateProjectionMatrix();
-		this.renderer.setSize(this.width, this.height);
 		this.renderer.setPixelRatio(1);
+		this.renderer.setSize(this.width, this.height);
+		this.composer.setSize(this.width, this.height);
+
 		this.camera.zoom = Math.pow(this.width / this.height, .5) * 50.2
 		this.shaderPass.uniforms.resolution.value.set(this.width, this.height)
 
