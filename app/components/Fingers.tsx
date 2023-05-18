@@ -2,7 +2,9 @@
 'use client';
 
 import * as THREE from 'three';
-window.THREE = THREE
+
+
+
 // import { CCDIKSolver } from 'three/addons/animation/CCDIKSolver.js';
 // import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SubsurfaceScatteringShader } from 'three/addons/shaders/SubsurfaceScatteringShader.js';
@@ -1555,7 +1557,7 @@ export class SampleLipidScene {
 		this.composer = new EffectComposer(this.renderer)
 
 		this.composer.addPass(new RenderPass(this.scene, this.camera))
-
+		window.THREE = THREE
 		var shaderPass = new ShaderPass(fxaa())
 		this.shaderPass = shaderPass
 		shaderPass.renderToScreen = true
@@ -1655,7 +1657,8 @@ export class SampleLipidScene {
 		this.camera.bottom = this.height / -2
 		this.camera.updateProjectionMatrix();
 		this.renderer.setSize(this.width, this.height);
-		this.camera.zoom = Math.pow(this.width, .5) * 1.2
+		this.renderer.setPixelRatio(1);
+		this.camera.zoom = Math.pow(this.width / this.height, .5) * 50.2
 		this.shaderPass.uniforms.resolution.value.set(this.width, this.height)
 
 	}
