@@ -2,6 +2,7 @@
 'use client';
 
 import * as THREE from 'three';
+window.THREE = THREE
 // import { CCDIKSolver } from 'three/addons/animation/CCDIKSolver.js';
 // import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { SubsurfaceScatteringShader } from 'three/addons/shaders/SubsurfaceScatteringShader.js';
@@ -13,6 +14,13 @@ import { MarchingCubes } from 'three/addons/objects/MarchingCubes.js';
 
 import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { GlitchPass } from 'three/addons/postprocessing/GlitchPass.js';
+
+
+import fxaa from 'three-shader-fxaa'
 import Matter from 'matter-js';
 import MatterAttractors from 'matter-attractors'
 Matter.use(MatterAttractors)
@@ -1413,6 +1421,7 @@ export class SampleLipidScene {
 	private canvas_el: HTMLCanvasElement;
 	private renderer: THREE.WebGLRenderer;
 	private scene: THREE.Scene;
+	private composer: any;
 	private camera: any;
 	private width: number;
 	private height: number;
@@ -1510,8 +1519,8 @@ export class SampleLipidScene {
 			antialias: false
 		});
 
-		let stats = new Stats();
-		document.body.appendChild(stats.dom);
+		// let stats = new Stats();
+		// document.body.appendChild(stats.dom);
 
 
 		this.camera = new THREE.PerspectiveCamera(75, this.width / this.height, 0.1, 1000);
@@ -1540,12 +1549,25 @@ export class SampleLipidScene {
 		// grid.material.color = new THREE.Color(0x404040)
 		// this.scene.add(grid);
 
+
 		this.scene = new THREE.Scene();
+
+		this.composer = new EffectComposer(this.renderer)
+
+		this.composer.addPass(new RenderPass(this.scene, this.camera))
+
+		var shaderPass = new ShaderPass(fxaa())
+		this.shaderPass = shaderPass
+		shaderPass.renderToScreen = true
+		this.composer.addPass(shaderPass)
+		shaderPass.uniforms.resolution.value.set(this.width, this.height)
+
+
 
 		this.top = top
 
 		this.buildLights()
-
+		this.camera.updateProjectionMatrix();
 		// const axesHelper = new THREE.AxesHelper(5);
 		// axesHelper.position.y = 0
 		// this.scene.add(axesHelper);
@@ -1634,7 +1656,8 @@ export class SampleLipidScene {
 		this.camera.updateProjectionMatrix();
 		this.renderer.setSize(this.width, this.height);
 		this.camera.zoom = Math.pow(this.width, .5) * 1.2
-		console.log(this.camera.zoom)
+		this.shaderPass.uniforms.resolution.value.set(this.width, this.height)
+
 	}
 
 	animate(t) {
@@ -1642,8 +1665,7 @@ export class SampleLipidScene {
 			return;
 		}
 
-		this.renderer.render(this.scene, this.camera);
-		this.camera.updateProjectionMatrix()
+
 
 		this.logo_alpha_uniform.value = Math.lerp(this.logo_alpha_uniform.value, 1, 0.01)
 
@@ -1662,6 +1684,8 @@ export class SampleLipidScene {
 
 		requestAnimationFrame(this.animate.bind(this));
 
+		this.camera.updateProjectionMatrix();
+		this.composer.render();
 
 		this.uniforms.time.value = t / 1000
 

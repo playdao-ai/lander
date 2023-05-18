@@ -1,6 +1,13 @@
-Playdao is a protocol that aims to achieve world consciousness. It uses a global decentralized acyclic graph protocol of weighted actions called the **Action Graph** which is also coupled with an action comparison acyclic graph called **Value Graph** - enabling each action to be weighted against each other action(s) through **Swap Nodes** within the graph. Playdao is non-profit and open-source and is the substrate required for value-task driven currency-free systems & gift-economies of the future. Playdaos protocol couples fundamental concepts from graph theory, blockchain, cryptography, economy, and artificial intelligence into a single system enabling greater transparency, efficiency, and fairness. Playdao connects education & learning, exchange of goods and services, and organizational structures into one global interconnected ecosystem which mimics the structure of a neural network.
 
-Each action in Playdaos action graph has **dependency rules** - other discreet action prerequisites and/or values required to serve as reputation to either observe or perform the action. Actions can be things such as "giving a cookie", "reading a book", "taking a specfic class", or any other generic form of attestation.
+Playdao is an avant-garde, exploratory protocol designed to pioneer a world operating on collective consciousness, transcending conventional monetary systems. At its core, it harnesses the power of a decentralized directed acyclic graph, the Weighted Action Graph (WAG), engineered to shape dynamic, action-value-centric educational, organizational, and economic infrastructures.
+
+By amalgamating fundamental principles from graph theory, artificial intelligence, cryptography, and economics, Playdao cultivates a unified, global "substrate" protocol. This protocol ushers in an era of enhanced transparency, effectiveness, and equitable practices.
+
+In this transformative system, individuals experience life, work, learning, and personal development in an environment stimulated by tangible actions, henceforth instigating a groundbreaking new ontology. This revolutionary concept gives rise to a network of interconnected, organically structured social and economic structures devoid of conventional currency, heralding the future of human interaction and societal organization.
+
+------
+
+Each action in Playdaos action graph has **dependency rules** - other discreet action prerequisites and value requirements required to either observe or perform different actions. Actions can be things such as "giving a cookie", "reading a book", "taking a specfic class", or any other generic form of attestation.
 
 Actions are also linked to different **Values** via **Value Graphs** consisting of **Swap Nodes** which connect up to form a graph. Each node within the graph acts as a barter comparison formula between different actions (2 - infinity). Swap nodes are rules for weighing different actions against each other. Actions can respect different **Swap Nodes** within their dependency rules to act as proofs of reputation. Reputation is recycled back into the system when it used as proof upon action completion. 
 

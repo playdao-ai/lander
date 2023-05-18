@@ -60,7 +60,7 @@ export default function Main() {
 			<canvas className='w-full h-full' ref={ref} />
 		</div>
 		<div className='w-full flex flex-col items-center px-4 z-20 relative min-h-screen top-[-500px] text-white'>
-			<div className='w-[600px] max-w-full flex flex-col'>
+			<div className='w-[300px] max-w-full flex flex-col'>
 				<img src='./logo-name.svg ' className='w-full'></img>
 				<h1>unlocking global consiousness</h1>
 			</div>

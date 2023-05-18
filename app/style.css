@@ -34,7 +34,7 @@ p {
 }
 
 h1 {
-	font-size: 2.4em;
+	font-size: 1.4em;
 	font-weight: 700;
 	margin-top: .2em;
 	margin-bottom: 2em;
@@ -42,6 +42,12 @@ h1 {
 	color: #00e65b;
 	text-transform: capitalize;
 	text-align: start;
+}
+
+hr {
+	border: 1px solid #00e65b;
+	margin-top: 2em;
+	margin-bottom: 2em;
 }
 
 .content {
