@@ -1,11 +1,13 @@
+Playdao is an avant-garde, exploratory protocol designed to pioneer a world operating on collective consciousness, transcending conventional currency systems. At its core, it harnesses the power of a decentralized directed acyclic graph, the Weighted Action Graph (WAG), engineered to shape dynamic, action-value-centric educational, organizational, and economic infrastructures.
 
-Playdao is an avant-garde, exploratory protocol designed to pioneer a world operating on collective consciousness, transcending conventional monetary systems. At its core, it harnesses the power of a decentralized directed acyclic graph, the Weighted Action Graph (WAG), engineered to shape dynamic, action-value-centric educational, organizational, and economic infrastructures.
+It provides greater transparency, efficiency, and fairness by coupling fundamental concepts from graph theory, artificial intelligence, cryptography, and economics into a single global "substrate" protocol.
 
-By amalgamating fundamental principles from graph theory, artificial intelligence, cryptography, and economics, Playdao cultivates a unified, global "substrate" protocol. This protocol ushers in an era of enhanced transparency, effectiveness, and equitable practices.
-
-In this transformative system, individuals experience life, work, learning, and personal development in an environment stimulated by tangible actions, henceforth instigating a groundbreaking new ontology. This revolutionary concept gives rise to a network of interconnected, organically structured social and economic structures devoid of conventional currency, heralding the future of human interaction and societal organization.
+People live, work, learn, and grow in a system driven by pure action giving birth to a revolutionary new ontology of interconnected organically organized social and economic zero-currency structures of the future.
 
 ------
+
+The playdao protocol WAG ontology consists of 2 unqiue types of nodes - actions, and values - along with all 4 possible edges that connect them. Action nodes serve as actions, and the edges connecting them to other actions and values are dependencies. Actions are paired wih value nodes which represent the total sum of all connected actions and other value nodes.
+
 
 Each action in Playdaos action graph has **dependency rules** - other discreet action prerequisites and value requirements required to either observe or perform different actions. Actions can be things such as "giving a cookie", "reading a book", "taking a specfic class", or any other generic form of attestation.
 

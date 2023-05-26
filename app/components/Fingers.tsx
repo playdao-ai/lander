@@ -204,9 +204,7 @@ export class Cell {
 	private blob: THREE.Mesh;
 	private runner: Matter.Runner;
 	private blob_engine: Matter.Engine;
-	private mouse_down: boolean = false;
-	private screen_mouse: THREE.Vector2 = new THREE.Vector2();
-	private world_mouse: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+
 
 	constructor(settings, gui, camera, renderer, scene, cell_uniforms, canvas_el) {
 		this.root = new THREE.Object3D()
@@ -248,18 +246,7 @@ export class Cell {
 
 	buildDragControls() {
 
-		window.addEventListener('mousedown', () => {
-			this.mouse_down = true
-		});
 
-		window.addEventListener('mouseup', () => {
-			this.mouse_down = false
-		})
-
-		window.addEventListener('mousemove', (e) => {
-			this.screen_mouse.set(e.screenX, e.screenY)
-			screenToWorld(this.canvas_el, this.camera, this.screen_mouse, this.world_mouse)
-		})
 
 
 		let joint_drag_controls = new DragControls(this.joint_handles, this.camera, this.renderer.domElement);
@@ -1066,9 +1053,8 @@ export class Cell {
 		// pill.face.rotation.z = 0
 
 		// pill.tip_position.copy(tip_position).(camera.position,tip_radius)
-
-
 	}
+
 
 	buildPills() {
 		let pill = undefined
@@ -1436,6 +1422,9 @@ export class SampleLipidScene {
 	private engine: Matter.Engine;
 	private world: Matter.World;
 	private uniforms: any;
+	private mouse_down: boolean = false;
+	private screen_mouse: THREE.Vector2 = new THREE.Vector2();
+	private world_mouse: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
 
 	constructor(canvas_el, { top: top }) {
 		console.log('constructing scene')
@@ -1493,26 +1482,6 @@ export class SampleLipidScene {
 
 		this.settings3 = settings3
 
-		// let gui = new GUI();
-		// this.gui = gui
-
-		// gui.add(settings, 'camera_rotation')
-		// 	.name('camera rotation')
-		// 	.onChange(value => {
-		// 		this.controls.enableRotate = value;
-		// 		if (value == false) {
-		// 			console.log('test')
-		// 			this.controls.reset();
-		// 			this.camera.position.set(0, 0, 10)
-		// 		}
-		// 	});
-
-		// gui.add(settings, 'joint_count')
-		// 	.name('joint count')
-		// 	.onChange(value => {
-
-		// 	});
-
 
 		this.renderer = new THREE.WebGLRenderer({
 			canvas: canvas_el,
@@ -1521,13 +1490,9 @@ export class SampleLipidScene {
 			antialias: false
 		});
 
-		// let stats = new Stats();
-		// document.body.appendChild(stats.dom);
-
 
 		this.camera = new THREE.PerspectiveCamera(75, this.width / this.height, 0.1, 1000);
 		this.camera = new THREE.OrthographicCamera(this.width / -2, this.width / 2, this.height / 2, this.height / -2, 0.1, 1000);
-		// this.controls = new OrbitControls(this.camera, this.renderer.domElement);
 
 		window.camera = this.camera
 		// console.log(this.controls)
@@ -1538,18 +1503,6 @@ export class SampleLipidScene {
 		this.camera.lookAt(0, 0, 0)
 		this.scene = new THREE.Scene();
 		this.scene.background = new THREE.Color(0xffffff);
-
-		// this.controls.enableRotate = false;
-		// this.scene.background = new THREE.Color().setHSL(0.6, 0.5, 0.5);
-
-		// const grid = new THREE.GridHelper(20, 20);
-		// grid.rotation.x = Math.PI / 2;
-		// grid.material.opacity = 0.15
-		// grid.material.transparent = true
-		// grid.material.depthWrite = false
-		// grid.material.depthTest = false
-		// grid.material.color = new THREE.Color(0x404040)
-		// this.scene.add(grid);
 
 
 		this.scene = new THREE.Scene();
@@ -1564,19 +1517,10 @@ export class SampleLipidScene {
 		this.composer.addPass(shaderPass)
 		shaderPass.uniforms.resolution.value.set(this.width, this.height)
 
-
-
 		this.top = top
 
 		this.buildLights()
 		this.camera.updateProjectionMatrix();
-		// const axesHelper = new THREE.AxesHelper(5);
-		// axesHelper.position.y = 0
-		// this.scene.add(axesHelper);
-
-		// const light = new THREE.AmbientLight(new THREE.Color(1, 1, 1), 0.1); // soft white light
-		// this.scene.add(light);
-		// this.controls.enableRotate = settings.camera_rotation
 
 
 		window.addEventListener('resize', this.resize.bind(this));
@@ -1604,21 +1548,45 @@ export class SampleLipidScene {
 
 		if (top) {
 			this.buildCenterLogo()
+
 		}
+
 
 		this.animate(0)
 		this.resize()
+
+
+		window.addEventListener('mousedown', () => {
+			this.mouse_down = true
+		});
+
+		window.addEventListener('mouseup', () => {
+			this.mouse_down = false
+		});
+
+		window.addEventListener('mousemove', (e) => {
+			this.screen_mouse.set(e.screenX, e.screenY)
+			screenToWorld(this.canvas_el, this.camera, this.screen_mouse, this.world_mouse)
+		});
+
 	}
 
+
 	buildLights() {
-		const pointLight1 = new THREE.Mesh(new THREE.SphereGeometry(0, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+		this.mouse_light = new THREE.Mesh(new THREE.SphereGeometry(0, 8, 8), new THREE.MeshBasicMaterial({ color: (new THREE.Color()).setHSL(0.4, 0.5, 1.0) }));
 
-		// pointLight1.add(new THREE.PointLight(new THREE.Color(1, 1, 1), .2, 20));
-		// this.scene.add(pointLight1);
-		// pointLight1.position.x = 0;
-		// pointLight1.position.y = 0;
-		// pointLight1.position.z = 0;
+		this.mouse_light.add(new THREE.PointLight(new THREE.Color(1, 1, 1), .3, 20));
+		this.scene.add(this.mouse_light);
+		this.mouse_light.position.x = 0;
+		this.mouse_light.position.y = 0;
+		this.mouse_light.position.z = 10;
 
+	}
+
+
+	animateLights() {
+		this.mouse_light.position.x = this.world_mouse.x
+		this.mouse_light.position.y = this.world_mouse.y
 	}
 
 	buildCenterLogo() {
@@ -1633,7 +1601,7 @@ export class SampleLipidScene {
 
 		let logo_shape = new THREE.Mesh(logo_geom, logo_material)
 		logo_shape.position.z = 0.1
-		logo_shape.position.y = 4
+		logo_shape.position.y = 0
 		logo_shape.scale.multiplyScalar(8)
 		this.scene.add(logo_shape)
 	}
@@ -1660,7 +1628,12 @@ export class SampleLipidScene {
 		this.renderer.setSize(this.width, this.height);
 		this.composer.setSize(this.width, this.height);
 
-		this.camera.zoom = Math.pow(this.width / this.height, .5) * 50.2
+
+		if (this.top) {
+			this.camera.zoom = Math.pow(this.width / this.height, .5) * 40.2
+		} else {
+			this.camera.zoom = Math.pow(this.width / this.height, .5) * 30.2
+		}
 		this.shaderPass.uniforms.resolution.value.set(this.width, this.height)
 
 	}
@@ -1669,7 +1642,6 @@ export class SampleLipidScene {
 		if (this.stop) {
 			return;
 		}
-
 
 
 		this.logo_alpha_uniform.value = Math.lerp(this.logo_alpha_uniform.value, 1, 0.01)
@@ -1693,6 +1665,8 @@ export class SampleLipidScene {
 		this.composer.render();
 
 		this.uniforms.time.value = t / 1000
+
+		this.animateLights()
 
 	}
 

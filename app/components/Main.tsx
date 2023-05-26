@@ -56,25 +56,25 @@ export default function Main() {
 
 	return <div className='w-full h-[200vh] relative'>
 
-		<div className='w-full h-[900px]'>
+		<div className='w-full h-screen'>
 			<canvas className='w-full h-full' ref={ref} />
 		</div>
-		<div className='w-full flex flex-col items-center px-4 z-20 relative min-h-screen top-[-500px] text-white'>
-			<div className='w-[300px] max-w-full flex flex-col'>
+
+
+		<div className='w-full flex flex-col items-center px-4 z-20 relative min-h-screen top-[-300px] text-white'>
+			<div className='w-[340px] max-w-full flex flex-col'>
 				<img src='./logo-name.svg ' className='w-full'></img>
 				<h1>unlocking global consiousness</h1>
 			</div>
 			<div className='w-[600px] max-w-full'>
 				<div className='content text-white-200'><Readme /></div>
 			</div>
-
-
-
 		</div>
+
 
 		<div className='w-full h-[400px] relative top-[-300px]'>
 			<div className='flex flex-down w-full items-center content-center justify-center z-10 relative'>
-				<a href='https://www.notion.so/another-draft-a0b2e273c0e0487891d3ff178cb0ba29?pvs=4'>
+				<a href='https://www.notion.so/PLAYDAO-Whitepaper-bc5eb3afedd1492a818161fba020512b'>
 					<div className='bg-white text-2xl font-thin outline outline-4 outline-fuchsia-800 hover:outline-fuchsia-500 cursor-pointer rounded-full px-12 p-6 text-black w-auto font-uppercase'>
 						read full whitepaper
 					</div>
