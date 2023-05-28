@@ -74,11 +74,11 @@ export default function Main() {
 
 		<div className='w-full h-[400px] relative top-[-300px]'>
 			<div className='flex flex-down w-full items-center content-center justify-center z-10 relative'>
-				<a href='https://www.notion.so/PLAYDAO-Whitepaper-bc5eb3afedd1492a818161fba020512b'>
+				{/* <a href='https://www.notion.so/PLAYDAO-Whitepaper-bc5eb3afedd1492a818161fba020512b'>
 					<div className='bg-white text-2xl font-thin outline outline-4 outline-fuchsia-800 hover:outline-fuchsia-500 cursor-pointer rounded-full px-12 p-6 text-black w-auto font-uppercase'>
 						read full whitepaper
 					</div>
-				</a>
+				</a> */}
 			</div>
 			<canvas className='w-full h-full' ref={ref2} />
 		</div>
