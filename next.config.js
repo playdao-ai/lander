@@ -12,13 +12,6 @@ const nextConfig = {
 			loader: '@mdx-js/loader'
 		})
 		return config
-	},
-	// plugins: [
-	// 	require('tailwindcss'),
-	// 	require('autoprefixer'),
-	// ],
-	experimental: {
-		appDir: true,
 	}
 }
 
